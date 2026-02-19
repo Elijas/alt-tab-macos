@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AA00000100000001AAAA0001 /* OverridableRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000001AAAA0003 /* OverridableRow.swift */; };
+		AA00000100000001AAAA0002 /* ShortcutsTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00000100000001AAAA0004 /* ShortcutsTab.swift */; };
 		1C96101BC5817A7F85FA1F8D /* titles_show_running_applications_light@2x.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 1C961F57248D4E2377A9038E /* titles_show_running_applications_light@2x.jpg */; };
 		1C96108A0CB2565233FE100B /* TableGroupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C961FB3DCF4906FEEF4A23D /* TableGroupView.swift */; };
 		1C96109FD155140CBA709A16 /* app_icons_hide_tabs_as_windows_light@2x.jpg in Resources */ = {isa = PBXBuildFile; fileRef = 1C961CABD14356E109102D56 /* app_icons_hide_tabs_as_windows_light@2x.jpg */; };
@@ -376,6 +378,8 @@
 		5F17452D2F1A907800128EF8 /* WindowDiscriminator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowDiscriminator.swift; sourceTree = "<group>"; };
 		5F21C9DF2C6E94240091F72F /* ShortcutsWhenActiveSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutsWhenActiveSheet.swift; sourceTree = "<group>"; };
 		5F21C9E12C6E94410091F72F /* AdditionalControlsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdditionalControlsSheet.swift; sourceTree = "<group>"; };
+		AA00000100000001AAAA0003 /* OverridableRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverridableRow.swift; sourceTree = "<group>"; };
+		AA00000100000001AAAA0004 /* ShortcutsTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutsTab.swift; sourceTree = "<group>"; };
 		5F21C9E32C6E94700091F72F /* CustomizeStyleSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomizeStyleSheet.swift; sourceTree = "<group>"; };
 		5F21C9E52C6E94920091F72F /* AnimationsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnimationsSheet.swift; sourceTree = "<group>"; };
 		5F21C9E72C6E96A00091F72F /* SheetWindow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SheetWindow.swift; sourceTree = "<group>"; };
@@ -861,6 +865,15 @@
 				5F21C9E52C6E94920091F72F /* AnimationsSheet.swift */,
 			);
 			path = appearance;
+			sourceTree = "<group>";
+		};
+		AA00000100000001AAAA0005 /* shortcuts */ = {
+			isa = PBXGroup;
+			children = (
+				AA00000100000001AAAA0004 /* ShortcutsTab.swift */,
+				AA00000100000001AAAA0003 /* OverridableRow.swift */,
+			);
+			path = shortcuts;
 			sourceTree = "<group>";
 		};
 		5F2218B12F156BC6005769F9 /* support */ = {
@@ -1552,6 +1565,7 @@
 			children = (
 				5F21C9DE2C6E93F10091F72F /* appearance */,
 				5F21C9DD2C6E93E60091F72F /* controls */,
+				AA00000100000001AAAA0005 /* shortcuts */,
 				D04BA4A26987F67DD94C827F /* AboutTab.swift */,
 				D04BACE22DC907F03D193075 /* GeneralTab.swift */,
 				D04BAD60C97E609A759E721E /* PoliciesTab.swift */,
@@ -2547,6 +2561,8 @@
 				D04BA56789A2AF52557A9BFF /* AppCenterCrashes.swift in Sources */,
 				D04BADA3F2DAB820D6FC6E75 /* AppCenterApplication.m in Sources */,
 				D04BAA16F21AC41A23DDA63D /* ControlsTab.swift in Sources */,
+				AA00000100000001AAAA0001 /* OverridableRow.swift in Sources */,
+				AA00000100000001AAAA0002 /* ShortcutsTab.swift in Sources */,
 				D04BADE4DDF7597749FB13BD /* SettingsWindow.swift in Sources */,
 				BF0C8CC5057406014FD612CC /* ATShortcut.swift in Sources */,
 				BF0C8C7E96DB48120462DA00 /* TrafficLightButton.swift in Sources */,

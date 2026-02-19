@@ -690,8 +690,8 @@ class SettingsWindow: NSWindow {
 
     private func sectionDefinitions() -> [SettingsSectionDefinition] {
         [
-            SettingsSectionDefinition(id: "appearance", title: NSLocalizedString("Appearance", comment: ""), imageName: "appearance", systemSymbolName: "paintpalette", view: AppearanceTab.initTab()),
-            SettingsSectionDefinition(id: "controls", title: NSLocalizedString("Controls", comment: ""), imageName: "controls", systemSymbolName: "command", view: ControlsTab.initTab()),
+            SettingsSectionDefinition(id: "shortcuts", title: NSLocalizedString("Shortcuts", comment: ""), imageName: "controls", systemSymbolName: "command", view: ShortcutsTab.initTab()),
+            SettingsSectionDefinition(id: "controls", title: NSLocalizedString("Controls", comment: ""), imageName: "controls", systemSymbolName: "slider.horizontal.3", view: ControlsSection.initTab()),
             SettingsSectionDefinition(id: "general", title: NSLocalizedString("General", comment: ""), imageName: "general", systemSymbolName: "gearshape", view: GeneralTab.initTab()),
             SettingsSectionDefinition(id: "policies", title: NSLocalizedString("Policies", comment: ""), imageName: "policies", systemSymbolName: "antenna.radiowaves.left.and.right", view: PoliciesTab.initTab()),
             SettingsSectionDefinition(id: "blacklists", title: NSLocalizedString("Blacklists", comment: ""), imageName: "blacklists", systemSymbolName: "hand.raised", view: BlacklistsTab.initTab()),
@@ -1106,6 +1106,8 @@ class SettingsWindow: NSWindow {
         if action == #selector(AppearanceTab.showAnimationsSheet) { return AppearanceTab.animationsSheet }
         if action == #selector(ControlsTab.showShortcutsSettings) { return ControlsTab.shortcutsWhenActiveSheet }
         if action == #selector(ControlsTab.showAdditionalControlsSettings) { return ControlsTab.additionalControlsSheet }
+        if action == #selector(ControlsSection.showShortcutsSettings) { return ControlsSection.shortcutsWhenActiveSheet }
+        if action == #selector(ShortcutsTab.showAdditionalControlsSettings) { return ShortcutsTab.additionalControlsSheet }
         return nil
     }
 
@@ -1220,7 +1222,21 @@ class SettingsWindow: NSWindow {
             sidebarTableView.selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
         }
         guard scroll else { return }
-        scrollToSection(section)
+        if SettingsSearch.isQueryEmpty(searchField.stringValue) {
+            showOnlySection(section)
+        } else {
+            scrollToSection(section)
+        }
+    }
+
+    private func showOnlySection(_ section: SettingsSection) {
+        sections.forEach { $0.container.isHidden = ($0.id != section.id) }
+        // The shown section is both first and last, so give it proper top padding and zero trailing spacing
+        section.titleTopConstraint.constant = Self.topSectionTitlePadding
+        section.interSectionSpacingConstraint.constant = 0
+        section.bottomSpacingConstraint.constant = 0
+        rightScrollView.contentView.scroll(to: .zero)
+        rightScrollView.reflectScrolledClipView(rightScrollView.contentView)
     }
 
     private func scrollToSection(_ section: SettingsSection) {
@@ -1241,7 +1257,10 @@ class SettingsWindow: NSWindow {
         let visibleSectionIds = Set(visibleSections.map(\.id))
         sections.forEach {
             let isVisible = visibleSectionIds.contains($0.id)
-            $0.container.isHidden = !isVisible
+            // When no query, don't unhide all — selectSection will handle visibility
+            if hasQuery {
+                $0.container.isHidden = !isVisible
+            }
             if isVisible && hasQuery {
                 $0.highlightMatches(query)
             } else {
