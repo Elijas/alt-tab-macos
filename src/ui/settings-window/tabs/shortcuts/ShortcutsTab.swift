@@ -305,7 +305,7 @@ class ShortcutsTab: NSObject {
 
         // Defaults row (fixed at top)
         let defaultsRow = ShortcutSidebarRow()
-        defaultsRow.setContent(NSLocalizedString("Defaults", comment: ""), NSLocalizedString("Inherited by all shortcuts", comment: ""))
+        defaultsRow.setContent(NSLocalizedString("Defaults", comment: ""), NSLocalizedString("Applied to all", comment: ""))
         defaultsRow.onClick = { _, _ in selectDefaults() }
         defaultsRow.onMouseEntered = { _, _ in defaultsRow.setHovered(true) }
         defaultsRow.onMouseExited = { _, _ in defaultsRow.setHovered(false) }
@@ -524,15 +524,9 @@ class ShortcutsTab: NSObject {
         hint.lineBreakMode = .byWordWrapping
         hint.preferredMaxLayoutWidth = width - 20
         hint.translatesAutoresizingMaskIntoConstraints = false
-        let footerRow = NSStackView(views: [footerLabel, resetAllButton])
-        footerRow.orientation = .horizontal
-        footerRow.alignment = .centerY
-        footerRow.spacing = 8
-        footerRow.translatesAutoresizingMaskIntoConstraints = false
-        let hintWrapper = NSStackView(views: [hint, footerRow])
+        let hintWrapper = NSStackView(views: [hint])
         hintWrapper.orientation = .vertical
         hintWrapper.alignment = .leading
-        hintWrapper.spacing = 4
         hintWrapper.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 2, right: 0)
         table.addNewTable()
         table.addRow(leftViews: [hintWrapper], rightViews: nil)
@@ -609,6 +603,10 @@ class ShortcutsTab: NSObject {
             label: NSLocalizedString("Show on", comment: ""),
             preferences: ShowOnScreenPreference.allCases, section: "Multiple screens")
 
+        // Footer
+        table.addNewTable()
+        table.addRow(leftViews: [footerLabel], rightViews: [resetAllButton])
+
         // Pre-activate demo overrides for Shortcut 1
         if index == 0 {
             preActivateDemoOverrides(in: table, tracker: tracker)
@@ -657,15 +655,9 @@ class ShortcutsTab: NSObject {
         gestureHint.lineBreakMode = .byWordWrapping
         gestureHint.preferredMaxLayoutWidth = width - 20
         gestureHint.translatesAutoresizingMaskIntoConstraints = false
-        let gestureFooterRow = NSStackView(views: [footerLabel, gestureResetAllButton])
-        gestureFooterRow.orientation = .horizontal
-        gestureFooterRow.alignment = .centerY
-        gestureFooterRow.spacing = 8
-        gestureFooterRow.translatesAutoresizingMaskIntoConstraints = false
-        let gestureHintWrapper = NSStackView(views: [gestureHint, gestureFooterRow])
+        let gestureHintWrapper = NSStackView(views: [gestureHint])
         gestureHintWrapper.orientation = .vertical
         gestureHintWrapper.alignment = .leading
-        gestureHintWrapper.spacing = 4
         gestureHintWrapper.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 2, right: 0)
         table.addNewTable()
         table.addRow(leftViews: [gestureHintWrapper], rightViews: nil)
@@ -717,15 +709,16 @@ class ShortcutsTab: NSObject {
         let button: NSButton
         if #available(macOS 11.0, *),
            let image = NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: "Reset All") {
-            button = NSButton(title: NSLocalizedString("All", comment: ""), image: image, target: nil, action: nil)
+            button = NSButton(title: NSLocalizedString("Reset All", comment: ""), image: image, target: nil, action: nil)
             button.imagePosition = .imageTrailing
         } else {
-            button = NSButton(title: NSLocalizedString("All ↺", comment: ""), target: nil, action: nil)
+            button = NSButton(title: NSLocalizedString("Reset All ↺", comment: ""), target: nil, action: nil)
         }
         button.bezelStyle = .inline
         button.font = NSFont.systemFont(ofSize: 11)
         button.translatesAutoresizingMaskIntoConstraints = false
-        button.isHidden = true
+        button.isEnabled = false
+        button.alphaValue = 0.0
         return button
     }
 

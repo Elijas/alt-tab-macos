@@ -151,15 +151,19 @@ class OverrideTracker {
 
     private func updateFooter() {
         guard let label = footerLabel else { return }
-        resetAllButton?.isHidden = overriddenSettings.isEmpty
+        let hasOverrides = !overriddenSettings.isEmpty
+        resetAllButton?.alphaValue = hasOverrides ? 1.0 : 0.0
+        resetAllButton?.isEnabled = hasOverrides
         updateSectionTitles()
-        if overriddenSettings.isEmpty {
-            label.stringValue = ""
-            return
+        if hasOverrides {
+            let count = overriddenSettings.count
+            let noun = count == 1 ? "setting" : "settings"
+            label.stringValue = "⚡ \(count) \(noun) overridden"
+            label.textColor = .secondaryLabelColor
+        } else {
+            label.stringValue = NSLocalizedString("All settings inherited from Defaults", comment: "")
+            label.textColor = .tertiaryLabelColor
         }
-        let count = overriddenSettings.count
-        let noun = count == 1 ? "setting" : "settings"
-        label.stringValue = "⚡ \(count) \(noun) overridden"
     }
 
     private func updateSectionTitles() {
