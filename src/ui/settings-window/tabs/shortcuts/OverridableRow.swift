@@ -197,7 +197,7 @@ class OverrideTracker {
         if hasOverrides {
             let count = overriddenSettings.count
             let noun = count == 1 ? "setting" : "settings"
-            label.stringValue = "⚡ \(count) \(noun) overridden"
+            label.stringValue = "⚡ \(count) \(noun) customized"
             label.textColor = .labelColor
         } else {
             label.stringValue = String(format: NSLocalizedString("All settings for %@ currently inherited from Defaults.", comment: ""), contextName)

@@ -927,8 +927,8 @@ class ShortcutsTab: NSObject {
         button.bezelStyle = .inline
         button.font = NSFont.systemFont(ofSize: 11)
         button.translatesAutoresizingMaskIntoConstraints = false
+        button.isHidden = true
         button.isEnabled = false
-        button.alphaValue = 0.0
         return button
     }
 
