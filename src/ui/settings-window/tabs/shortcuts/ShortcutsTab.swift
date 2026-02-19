@@ -551,35 +551,35 @@ class ShortcutsTab: NSObject {
         tracker.registerSectionTitle(filteringTitle, section: "Filtering")
         table.addRow(leftViews: [filteringTitle], rightViews: nil)
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("appsToShow", index),
+            settingName: Preferences.indexToName("appsToShow", index), defaultsSettingName: "appsToShow",
             label: NSLocalizedString("Show windows from applications", comment: ""),
             preferences: AppsToShowPreference.allCases, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("spacesToShow", index),
+            settingName: Preferences.indexToName("spacesToShow", index), defaultsSettingName: "spacesToShow",
             label: NSLocalizedString("Show windows from Spaces", comment: ""),
             preferences: SpacesToShowPreference.allCases, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("screensToShow", index),
+            settingName: Preferences.indexToName("screensToShow", index), defaultsSettingName: "screensToShow",
             label: NSLocalizedString("Show windows from screens", comment: ""),
             preferences: ScreensToShowPreference.allCases, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("showMinimizedWindows", index),
+            settingName: Preferences.indexToName("showMinimizedWindows", index), defaultsSettingName: "showMinimizedWindows",
             label: NSLocalizedString("Show minimized windows", comment: ""),
             preferences: ShowHowPreference.allCases, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("showHiddenWindows", index),
+            settingName: Preferences.indexToName("showHiddenWindows", index), defaultsSettingName: "showHiddenWindows",
             label: NSLocalizedString("Show hidden windows", comment: ""),
             preferences: ShowHowPreference.allCases, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("showFullscreenWindows", index),
+            settingName: Preferences.indexToName("showFullscreenWindows", index), defaultsSettingName: "showFullscreenWindows",
             label: NSLocalizedString("Show fullscreen windows", comment: ""),
             preferences: ShowHowPreference.allCases.filter { $0 != .showAtTheEnd }, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("showWindowlessApps", index),
+            settingName: Preferences.indexToName("showWindowlessApps", index), defaultsSettingName: "showWindowlessApps",
             label: NSLocalizedString("Show apps with no open window", comment: ""),
             preferences: ShowHowPreference.allCases, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("windowOrder", index),
+            settingName: Preferences.indexToName("windowOrder", index), defaultsSettingName: "windowOrder",
             label: NSLocalizedString("Order windows by", comment: ""),
             preferences: WindowOrderPreference.allCases, section: "Filtering")
 
@@ -589,7 +589,7 @@ class ShortcutsTab: NSObject {
         tracker.registerSectionTitle(behaviorTitle, section: "Behavior")
         table.addRow(leftViews: [behaviorTitle], rightViews: nil)
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("shortcutStyle", index),
+            settingName: Preferences.indexToName("shortcutStyle", index), defaultsSettingName: "shortcutStyle",
             label: NSLocalizedString("After keys are released", comment: ""),
             preferences: ShortcutStylePreference.allCases, section: "Behavior")
 
@@ -669,35 +669,35 @@ class ShortcutsTab: NSObject {
         tracker.registerSectionTitle(gestureFilteringTitle, section: "Filtering")
         table.addRow(leftViews: [gestureFilteringTitle], rightViews: nil)
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("appsToShow", index),
+            settingName: Preferences.indexToName("appsToShow", index), defaultsSettingName: "appsToShow",
             label: NSLocalizedString("Show windows from applications", comment: ""),
             preferences: AppsToShowPreference.allCases, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("spacesToShow", index),
+            settingName: Preferences.indexToName("spacesToShow", index), defaultsSettingName: "spacesToShow",
             label: NSLocalizedString("Show windows from Spaces", comment: ""),
             preferences: SpacesToShowPreference.allCases, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("screensToShow", index),
+            settingName: Preferences.indexToName("screensToShow", index), defaultsSettingName: "screensToShow",
             label: NSLocalizedString("Show windows from screens", comment: ""),
             preferences: ScreensToShowPreference.allCases, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("showMinimizedWindows", index),
+            settingName: Preferences.indexToName("showMinimizedWindows", index), defaultsSettingName: "showMinimizedWindows",
             label: NSLocalizedString("Show minimized windows", comment: ""),
             preferences: ShowHowPreference.allCases, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("showHiddenWindows", index),
+            settingName: Preferences.indexToName("showHiddenWindows", index), defaultsSettingName: "showHiddenWindows",
             label: NSLocalizedString("Show hidden windows", comment: ""),
             preferences: ShowHowPreference.allCases, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("showFullscreenWindows", index),
+            settingName: Preferences.indexToName("showFullscreenWindows", index), defaultsSettingName: "showFullscreenWindows",
             label: NSLocalizedString("Show fullscreen windows", comment: ""),
             preferences: ShowHowPreference.allCases.filter { $0 != .showAtTheEnd }, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("showWindowlessApps", index),
+            settingName: Preferences.indexToName("showWindowlessApps", index), defaultsSettingName: "showWindowlessApps",
             label: NSLocalizedString("Show apps with no open window", comment: ""),
             preferences: ShowHowPreference.allCases, section: "Filtering")
         addOverridableDropdownRow(table, tracker: tracker,
-            settingName: Preferences.indexToName("windowOrder", index),
+            settingName: Preferences.indexToName("windowOrder", index), defaultsSettingName: "windowOrder",
             label: NSLocalizedString("Order windows by", comment: ""),
             preferences: WindowOrderPreference.allCases, section: "Filtering")
 
@@ -730,11 +730,13 @@ class ShortcutsTab: NSObject {
     private static func addOverridableDropdownRow(_ table: TableGroupView,
                                                    tracker: OverrideTracker,
                                                    settingName: String,
+                                                   defaultsSettingName: String? = nil,
                                                    label: String,
                                                    preferences: [MacroPreference],
                                                    section: String) {
         var overridableRef: OverridableRowView?
-        let dropdown = LabelAndControl.makeDropdown(settingName, preferences)
+        let inheritedKey = defaultsSettingName ?? settingName
+        let dropdown = LabelAndControl.makeDropdown(inheritedKey, preferences)
         // Chain override activation into the control's own action so direct clicks also activate
         dropdown.onAction = {
             LabelAndControl.controlWasChanged($0, nil)
@@ -745,7 +747,7 @@ class ShortcutsTab: NSObject {
         overridableRef = overridable
         overridable.refreshControl = { [weak dropdown] in
             guard let dropdown else { return }
-            let index = CachedUserDefaults.intFromMacroPref(settingName, preferences)
+            let index = CachedUserDefaults.intFromMacroPref(inheritedKey, preferences)
             if index >= 0, index < dropdown.numberOfItems { dropdown.selectItem(at: index) }
         }
         tracker.registerSetting(settingName, section: section)
@@ -760,13 +762,15 @@ class ShortcutsTab: NSObject {
     private static func addOverridableSegmentRow(_ table: TableGroupView,
                                                   tracker: OverrideTracker,
                                                   settingName: String,
+                                                  defaultsSettingName: String? = nil,
                                                   label: String,
                                                   preferences: [MacroPreference],
                                                   segmentWidth: CGFloat,
                                                   section: String,
                                                   index: Int) {
         var overridableRef: OverridableRowView?
-        let control = LabelAndControl.makeSegmentedControl(settingName, preferences, segmentWidth: segmentWidth)
+        let inheritedKey = defaultsSettingName ?? settingName
+        let control = LabelAndControl.makeSegmentedControl(inheritedKey, preferences, segmentWidth: segmentWidth)
         // Chain override activation into the control's own action so direct clicks also activate
         control.onAction = {
             LabelAndControl.controlWasChanged($0, nil)
@@ -777,7 +781,7 @@ class ShortcutsTab: NSObject {
         overridableRef = overridable
         overridable.refreshControl = { [weak control] in
             guard let control else { return }
-            let selected = CachedUserDefaults.intFromMacroPref(settingName, preferences)
+            let selected = CachedUserDefaults.intFromMacroPref(inheritedKey, preferences)
             if selected >= 0, selected < control.segmentCount { control.selectedSegment = selected }
         }
         tracker.registerSetting(settingName, section: section)
@@ -792,19 +796,21 @@ class ShortcutsTab: NSObject {
     private static func addOverridableImageRadioRow(_ table: TableGroupView,
                                                      tracker: OverrideTracker,
                                                      settingName: String,
+                                                     defaultsSettingName: String? = nil,
                                                      preferences: [ImageMacroPreference],
                                                      section: String,
                                                      index: Int) {
         // Use a weak ref so the extraAction closure can trigger override activation
         var overridableRef: OverridableRowView?
-        let control = LabelAndControl.makeImageRadioButtons(settingName, preferences, extraAction: { _ in
+        let inheritedKey = defaultsSettingName ?? settingName
+        let control = LabelAndControl.makeImageRadioButtons(inheritedKey, preferences, extraAction: { _ in
             overridableRef?.activateOverride()
         }, buttonSpacing: 10)
         let overridable = OverridableRowView(settingName: settingName, control: control, layout: .vertical)
         overridableRef = overridable
         overridable.refreshControl = { [weak control] in
             guard let control else { return }
-            let selected = CachedUserDefaults.intFromMacroPref(settingName, preferences)
+            let selected = CachedUserDefaults.intFromMacroPref(inheritedKey, preferences)
             for (i, subview) in control.arrangedSubviews.enumerated() {
                 if let btn = subview as? ImageTextButtonView {
                     btn.state = i == selected ? .on : .off
