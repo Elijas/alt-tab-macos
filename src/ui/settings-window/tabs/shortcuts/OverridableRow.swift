@@ -24,20 +24,19 @@ class OverridableRowView: NSStackView {
         translatesAutoresizingMaskIntoConstraints = false
 
         resetButton = makeResetButton()
-        resetButton.isHidden = true
 
         if layout == .vertical {
             orientation = .vertical
             alignment = .centerX
             spacing = 6
-            addArrangedSubview(control)
             addArrangedSubview(resetButton)
+            addArrangedSubview(control)
         } else {
             orientation = .horizontal
             alignment = .centerY
             spacing = 4
-            addArrangedSubview(control)
             addArrangedSubview(resetButton)
+            addArrangedSubview(control)
         }
 
         applyInheritedAppearance()
@@ -59,6 +58,7 @@ class OverridableRowView: NSStackView {
         button.isBordered = false
         button.translatesAutoresizingMaskIntoConstraints = false
         button.setContentHuggingPriority(.required, for: .horizontal)
+        button.setContentCompressionResistancePriority(.required, for: .horizontal)
         button.toolTip = NSLocalizedString("Reset to default", comment: "")
         if #available(macOS 10.14, *) {
             button.contentTintColor = .secondaryLabelColor
@@ -84,14 +84,16 @@ class OverridableRowView: NSStackView {
         // Dim the entire OverridableRowView — composites through layer-backed children (e.g. ImageTextButtonView)
         alphaValue = 0.45
         leftLabel?.alphaValue = 0.45
-        resetButton.isHidden = true
+        resetButton.alphaValue = 0
+        resetButton.isEnabled = false
         refreshControl?()
     }
 
     private func applyOverriddenAppearance() {
         alphaValue = 1.0
         leftLabel?.alphaValue = 1.0
-        resetButton.isHidden = false
+        resetButton.alphaValue = 1
+        resetButton.isEnabled = true
     }
 
     func setOverridden(_ overridden: Bool) {
@@ -159,7 +161,7 @@ class OverrideTracker {
             let count = overriddenSettings.count
             let noun = count == 1 ? "setting" : "settings"
             label.stringValue = "⚡ \(count) \(noun) overridden"
-            label.textColor = .secondaryLabelColor
+            label.textColor = .labelColor
         } else {
             label.stringValue = NSLocalizedString("All settings inherited from Defaults", comment: "")
             label.textColor = .tertiaryLabelColor
