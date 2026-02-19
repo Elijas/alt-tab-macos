@@ -103,6 +103,39 @@ class OverridableRowView: NSStackView {
             resetToInherited()
         }
     }
+
+    /// Returns the current selected index of the wrapped control (dropdown, segmented, or image radio).
+    var currentControlValue: Int? {
+        if let dropdown = wrappedControl as? NSPopUpButton {
+            return dropdown.indexOfSelectedItem
+        } else if let segmented = wrappedControl as? NSSegmentedControl {
+            return segmented.selectedSegment
+        } else if let stack = wrappedControl as? NSStackView {
+            // ImageTextButtonView radio group
+            for (i, subview) in stack.arrangedSubviews.enumerated() {
+                if let btn = subview as? ImageTextButtonView, btn.state == .on {
+                    return i
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Sets the selected index of the wrapped control (dropdown, segmented, or image radio).
+    func setControlValue(_ index: Int) {
+        if let dropdown = wrappedControl as? NSPopUpButton, index >= 0, index < dropdown.numberOfItems {
+            dropdown.selectItem(at: index)
+        } else if let segmented = wrappedControl as? NSSegmentedControl, index >= 0, index < segmented.segmentCount {
+            segmented.selectedSegment = index
+        } else if let stack = wrappedControl as? NSStackView {
+            // ImageTextButtonView radio group
+            for (i, subview) in stack.arrangedSubviews.enumerated() {
+                if let btn = subview as? ImageTextButtonView {
+                    btn.state = i == index ? .on : .off
+                }
+            }
+        }
+    }
 }
 
 /// Tracks which settings are overridden and updates a footer label.

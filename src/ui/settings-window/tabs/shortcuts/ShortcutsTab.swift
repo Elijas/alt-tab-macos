@@ -183,12 +183,18 @@ class ShortcutsTab: NSObject {
     private static var shortcutCountButtons: NSSegmentedControl?
     private static var multipleShortcutsCheckbox: NSButton?
     private static var shortcutsContentView: ShortcutsContentView?
-    private static var sidebarView: NSView?
-    private static var sidebarSeparator: NSView?
-    private static var sidebarWidthConstraint: NSLayoutConstraint?
-    private static var separatorWidthConstraint: NSLayoutConstraint?
+    private static var defaultsSidebarSeparator: NSView?
+    private static var buttonsRowView: NSStackView?
+    private static var gestureSidebarSeparator: NSView?
+    private static var simpleGestureSidebarRow: ShortcutSidebarRow?
+
+    /// Constraints that differ between simple and multi mode.
+    /// Swapped in setMultiModeElements(visible:).
+    private static var multiModeConstraints = [NSLayoutConstraint]()
+    private static var simpleModeConstraints = [NSLayoutConstraint]()
 
     private static var simpleModeEditorView: NSView?
+    private static var simpleGestureEditorView: NSView?
     private static var defaultsEditorView: NSView?
     private static var shortcutEditorViews = [NSView]()
     private static var gestureEditorView: NSView?
@@ -203,16 +209,43 @@ class ShortcutsTab: NSObject {
 
     static func initTab() -> NSView {
         simpleModeEditorView = makeSimpleModeEditor()
+        simpleGestureEditorView = makeSimpleGestureEditor()
         defaultsEditorView = makeDefaultsEditor()
         shortcutEditorViews = (0..<Preferences.maxShortcutCount).map { makeShortcutEditor(index: $0) }
         gestureEditorView = makeGestureEditor()
         let shortcutsView = makeShortcutsView()
-        let checkbox = NSButton(checkboxWithTitle: NSLocalizedString("Enable Multiple Shortcuts and Gestures", comment: ""),
+        let checkbox = NSButton(checkboxWithTitle: NSLocalizedString("Enable multiple shortcuts", comment: ""),
             target: self, action: #selector(multipleShortcutsToggled(_:)))
         let isMultiEnabled = CachedUserDefaults.bool("multipleShortcutsEnabled")
         checkbox.state = isMultiEnabled ? .on : .off
         multipleShortcutsCheckbox = checkbox
-        setSidebarVisible(isMultiEnabled)
+        if !isMultiEnabled {
+            // First-time simple mode setup: preserve existing shortcutCount
+            if UserDefaults.standard.string(forKey: "savedShortcutCount") == nil {
+                Preferences.set("savedShortcutCount", String(Preferences.shortcutCount), false)
+            }
+            // Ensure Defaults snapshot exists for first-time disable
+            if loadSavedDefaultsSnapshot() == nil {
+                snapshotAllDefaults()
+                saveDefaultsSnapshot()
+                resolveOverridesToPerShortcutKeys()
+            }
+            Preferences.set("shortcutCount", "1", false)
+            selectedIndex = 0
+        } else {
+            // Multi mode: reconstruct overrides from saved state
+            if let savedSnapshot = loadSavedDefaultsSnapshot() {
+                var shortcut0Values = [String: Int]()
+                for baseName in indexedSettingBaseNames {
+                    shortcut0Values[baseName] = Int(UserDefaults.standard.string(forKey: baseName) ?? "0") ?? 0
+                }
+                for (key, value) in savedSnapshot { Preferences.set(key, String(value), false) }
+                snapshotAllDefaults()
+                reconstructOverrides(savedSnapshot: savedSnapshot, shortcut0PreRestoreValues: shortcut0Values)
+            }
+            selectedIndex = defaultsSelectionIndex
+        }
+        setMultiModeElements(visible: isMultiEnabled)
         // Account for checkbox height below the panel in the dynamic height calculation
         shortcutsContentView?.overhead = 120
         // Vertical container: panel fills available space, checkbox pinned at bottom
@@ -256,17 +289,12 @@ class ShortcutsTab: NSObject {
         content.addSubview(sidebar)
         content.addSubview(separator)
         content.addSubview(editorPane)
-        // Store refs for sidebar and styling toggle
         shortcutsContentView = content
-        sidebarView = sidebar
-        sidebarSeparator = separator
-        let sidebarWidth = sidebar.widthAnchor.constraint(equalToConstant: shortcutSidebarWidth)
-        sidebarWidthConstraint = sidebarWidth
-        let sepWidth = separator.widthAnchor.constraint(equalToConstant: 1)
-        separatorWidthConstraint = sepWidth
         // Dynamic height: fills the window's visible area, resizes with the window
         let heightConstraint = content.heightAnchor.constraint(equalToConstant: 520)
         content.heightConstraint = heightConstraint
+        let sidebarWidth = sidebar.widthAnchor.constraint(equalToConstant: shortcutSidebarWidth)
+        let sepWidth = separator.widthAnchor.constraint(equalToConstant: 1)
         NSLayoutConstraint.activate([
             content.widthAnchor.constraint(equalToConstant: SettingsWindow.contentWidth),
             heightConstraint,
@@ -304,6 +332,7 @@ class ShortcutsTab: NSObject {
         scrollView.documentView = documentView
         var views: [NSView] = []
         if let simpleModeEditorView { views.append(simpleModeEditorView) }
+        if let simpleGestureEditorView { views.append(simpleGestureEditorView) }
         if let defaultsEditorView { views.append(defaultsEditorView) }
         views.append(contentsOf: shortcutEditorViews)
         if let gestureEditorView { views.append(gestureEditorView) }
@@ -352,6 +381,7 @@ class ShortcutsTab: NSObject {
         defaultsSeparator.translatesAutoresizingMaskIntoConstraints = false
         defaultsSeparator.wantsLayer = true
         defaultsSeparator.layer?.backgroundColor = NSColor.tableSeparatorColor.cgColor
+        defaultsSidebarSeparator = defaultsSeparator
 
         // Scrollable shortcut rows
         let rows = NSStackView()
@@ -374,11 +404,12 @@ class ShortcutsTab: NSObject {
         rowsScrollView.documentView = documentView
         documentView.addSubview(rows)
 
-        // Gesture separator & row (fixed at bottom)
+        // Gesture separator & row (fixed at bottom, visible in multi mode only)
         let gestureSeparator = NSView()
         gestureSeparator.translatesAutoresizingMaskIntoConstraints = false
         gestureSeparator.wantsLayer = true
         gestureSeparator.layer?.backgroundColor = NSColor.tableSeparatorColor.cgColor
+        gestureSidebarSeparator = gestureSeparator
 
         let gestureRow = ShortcutSidebarRow()
         gestureRow.onClick = { _, _ in selectGesture() }
@@ -405,17 +436,18 @@ class ShortcutsTab: NSObject {
         buttonsRow.orientation = .horizontal
         buttonsRow.alignment = .leading
         buttonsRow.translatesAutoresizingMaskIntoConstraints = false
+        buttonsRowView = buttonsRow
 
         sidebar.addSubview(listContainer)
         sidebar.addSubview(buttonsRow)
 
+        // Shared constraints (always active)
         NSLayoutConstraint.activate([
-            // List container
+            // List container (horizontal + top)
             listContainer.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 10),
             listContainer.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 10),
             listContainer.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -10),
-            listContainer.bottomAnchor.constraint(equalTo: buttonsRow.topAnchor, constant: -10),
-            // Defaults row at top
+            // Defaults row
             defaultsRow.topAnchor.constraint(equalTo: listContainer.topAnchor),
             defaultsRow.leadingAnchor.constraint(equalTo: listContainer.leadingAnchor),
             defaultsRow.trailingAnchor.constraint(equalTo: listContainer.trailingAnchor),
@@ -425,40 +457,55 @@ class ShortcutsTab: NSObject {
             defaultsSeparator.leadingAnchor.constraint(equalTo: listContainer.leadingAnchor),
             defaultsSeparator.trailingAnchor.constraint(equalTo: listContainer.trailingAnchor),
             defaultsSeparator.heightAnchor.constraint(equalToConstant: TableGroupView.borderWidth),
-            // Scroll view for shortcut rows
-            rowsScrollView.topAnchor.constraint(equalTo: defaultsSeparator.bottomAnchor),
+            // Scroll view (horizontal + document internals)
             rowsScrollView.leadingAnchor.constraint(equalTo: listContainer.leadingAnchor),
             rowsScrollView.trailingAnchor.constraint(equalTo: listContainer.trailingAnchor),
-            rowsScrollView.bottomAnchor.constraint(equalTo: gestureSeparator.topAnchor),
             documentView.widthAnchor.constraint(equalTo: rowsScrollView.contentView.widthAnchor),
             documentView.heightAnchor.constraint(greaterThanOrEqualTo: rowsScrollView.contentView.heightAnchor),
             rows.topAnchor.constraint(equalTo: documentView.topAnchor),
             rows.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
             rows.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
             rows.bottomAnchor.constraint(lessThanOrEqualTo: documentView.bottomAnchor),
-            // Gesture separator
+            // Gesture separator (horizontal + height)
             gestureSeparator.leadingAnchor.constraint(equalTo: listContainer.leadingAnchor),
             gestureSeparator.trailingAnchor.constraint(equalTo: listContainer.trailingAnchor),
             gestureSeparator.heightAnchor.constraint(equalToConstant: TableGroupView.borderWidth),
             gestureSeparator.bottomAnchor.constraint(equalTo: gestureRow.topAnchor),
-            // Gesture row
+            // Gesture row (horizontal + height)
             gestureRow.leadingAnchor.constraint(equalTo: listContainer.leadingAnchor),
             gestureRow.trailingAnchor.constraint(equalTo: listContainer.trailingAnchor),
             gestureRow.heightAnchor.constraint(equalToConstant: sidebarRowHeight),
-            gestureRow.bottomAnchor.constraint(equalTo: listContainer.bottomAnchor),
             // Buttons
             buttonsRow.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 10),
             buttonsRow.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor, constant: -10),
         ])
 
+        // Mode-specific constraints (swapped in setMultiModeElements)
+        multiModeConstraints = [
+            // Scroll view between defaults separator and gesture separator
+            rowsScrollView.topAnchor.constraint(equalTo: defaultsSeparator.bottomAnchor),
+            rowsScrollView.bottomAnchor.constraint(equalTo: gestureSeparator.topAnchor),
+            // Gesture row at bottom of list
+            gestureRow.bottomAnchor.constraint(equalTo: listContainer.bottomAnchor),
+            // List container above buttons
+            listContainer.bottomAnchor.constraint(equalTo: buttonsRow.topAnchor, constant: -10),
+        ]
+        simpleModeConstraints = [
+            // Scroll view fills entire list container
+            rowsScrollView.topAnchor.constraint(equalTo: listContainer.topAnchor),
+            rowsScrollView.bottomAnchor.constraint(equalTo: listContainer.bottomAnchor),
+            // List container goes all the way to the bottom
+            listContainer.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor, constant: -10),
+        ]
+
         refreshGestureRow()
         return sidebar
     }
 
-    // MARK: - Simple Mode Editor (full-width, no overrides, includes trigger)
+    // MARK: - Simple Mode Editor (no overrides, includes trigger)
 
     private static func makeSimpleModeEditor() -> NSView {
-        let width = SettingsWindow.contentWidth
+        let width = shortcutEditorWidth
 
         let syncInherited: ActionClosure = { _ in
             snapshotAllDefaults()
@@ -527,6 +574,54 @@ class ShortcutsTab: NSObject {
         table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Multiple screens", comment: ""), bold: true)], rightViews: nil)
         table.addRow(leftText: NSLocalizedString("Show on", comment: ""),
             rightViews: LabelAndControl.makeDropdown("showOnScreen", ShowOnScreenPreference.allCases, extraAction: syncInherited))
+
+        return table
+    }
+
+    // MARK: - Simple Gesture Editor (trigger + filtering, no overrides)
+
+    private static func makeSimpleGestureEditor() -> NSView {
+        let width = shortcutEditorWidth
+        let gestureIdx = Preferences.gestureIndex
+        let table = TableGroupView(width: width)
+
+        // TRIGGER section
+        table.addNewTable()
+        let gesture = LabelAndControl.makeDropdown("nextWindowGesture", GesturePreference.allCases)
+        let message = NSLocalizedString("You may need to disable some conflicting system gestures", comment: "")
+        let button = NSButton(title: NSLocalizedString("Open Trackpad Settings…", comment: ""),
+            target: self, action: #selector(openSystemGestures(_:)))
+        let infoBtn = LabelAndControl.makeInfoButton(searchableTooltipTexts: [message], onMouseEntered: { event, view in
+            Popover.shared.show(event: event, positioningView: view, message: message, extraView: button)
+        })
+        let gestureWithTooltip = NSStackView()
+        gestureWithTooltip.orientation = .horizontal
+        gestureWithTooltip.alignment = .centerY
+        gestureWithTooltip.setViews([gesture], in: .trailing)
+        gestureWithTooltip.setViews([infoBtn], in: .leading)
+        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Trigger", comment: ""),
+            rightViews: [gestureWithTooltip]))
+
+        // FILTERING section — bound to per-gesture keys (e.g. appsToShow10)
+        table.addNewTable()
+        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Filtering", comment: ""), bold: true)], rightViews: nil)
+        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from applications", comment: ""))],
+            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("appsToShow", gestureIdx), AppsToShowPreference.allCases)])
+        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from Spaces", comment: ""))],
+            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("spacesToShow", gestureIdx), SpacesToShowPreference.allCases)])
+        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from screens", comment: ""))],
+            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("screensToShow", gestureIdx), ScreensToShowPreference.allCases)])
+        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show minimized windows", comment: ""),
+            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("showMinimizedWindows", gestureIdx), ShowHowPreference.allCases)]))
+        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show hidden windows", comment: ""),
+            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("showHiddenWindows", gestureIdx), ShowHowPreference.allCases)]))
+        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show fullscreen windows", comment: ""),
+            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("showFullscreenWindows", gestureIdx),
+                ShowHowPreference.allCases.filter { $0 != .showAtTheEnd })]))
+        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show apps with no open window", comment: ""),
+            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("showWindowlessApps", gestureIdx), ShowHowPreference.allCases)]))
+        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Order windows by", comment: ""),
+            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("windowOrder", gestureIdx), WindowOrderPreference.allCases)]))
 
         return table
     }
@@ -729,11 +824,6 @@ class ShortcutsTab: NSObject {
         // Footer
         table.addNewTable()
         table.addRow(leftViews: [footerLabel], rightViews: [resetAllButton])
-
-        // Pre-activate demo overrides for Shortcut 1
-        if index == 0 {
-            preActivateDemoOverrides(in: table, tracker: tracker)
-        }
 
         return table
     }
@@ -949,19 +1039,6 @@ class ShortcutsTab: NSObject {
         table.addRow(secondaryViews: [overridable], secondaryViewsAlignment: .centerX)
     }
 
-    /// Pre-activates a few overrides on Shortcut 1 for demo purposes.
-    private static func preActivateDemoOverrides(in table: TableGroupView, tracker: OverrideTracker) {
-        // Find OverridableRowViews in the table hierarchy and activate some
-        var overridables = [OverridableRowView]()
-        findOverridableRows(in: table, result: &overridables)
-        // Activate overrides for style and showMinimizedWindows (first two we find that match)
-        for row in overridables {
-            if row.settingName == "appearanceStyle" || row.settingName.hasPrefix("showMinimizedWindows") {
-                row.setOverridden(true)
-            }
-        }
-    }
-
     private static func findOverridableRows(in view: NSView, result: inout [OverridableRowView]) {
         if let overridable = view as? OverridableRowView {
             result.append(overridable)
@@ -1006,6 +1083,8 @@ class ShortcutsTab: NSObject {
         guard let rows = shortcutRowsStackView else { return }
         clearArrangedSubviews(rows)
         shortcutRows.removeAll(keepingCapacity: true)
+        simpleGestureSidebarRow = nil
+        let isSimpleMode = !CachedUserDefaults.bool("multipleShortcutsEnabled")
         for index in 0..<Preferences.shortcutCount {
             let row = ShortcutSidebarRow()
             row.setContent(shortcutTitle(index), shortcutSummary(index))
@@ -1027,6 +1106,28 @@ class ShortcutsTab: NSObject {
                 separator.heightAnchor.constraint(equalToConstant: TableGroupView.borderWidth).isActive = true
             }
         }
+        // Simple mode: add gesture row to the scrollable stack (adjacent to shortcut row)
+        if isSimpleMode {
+            let sep = NSView()
+            sep.translatesAutoresizingMaskIntoConstraints = false
+            sep.wantsLayer = true
+            sep.layer?.backgroundColor = NSColor.tableSeparatorColor.cgColor
+            rows.addArrangedSubview(sep)
+            sep.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
+            sep.heightAnchor.constraint(equalToConstant: TableGroupView.borderWidth).isActive = true
+
+            let gestureRow = ShortcutSidebarRow()
+            let gestureIndex = Int(UserDefaults.standard.string(forKey: "nextWindowGesture") ?? "0") ?? 0
+            let gesture = GesturePreference.allCases[safe: gestureIndex] ?? .disabled
+            gestureRow.setContent(NSLocalizedString("Gesture", comment: ""), gesture.localizedString)
+            gestureRow.onClick = { _, _ in selectGesture() }
+            gestureRow.onMouseEntered = { _, _ in gestureRow.setHovered(true) }
+            gestureRow.onMouseExited = { _, _ in gestureRow.setHovered(false) }
+            rows.addArrangedSubview(gestureRow)
+            gestureRow.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
+            gestureRow.heightAnchor.constraint(equalToConstant: sidebarRowHeight).isActive = true
+            simpleGestureSidebarRow = gestureRow
+        }
     }
 
     /// Updates only the text of existing sidebar rows without rebuilding them.
@@ -1040,31 +1141,37 @@ class ShortcutsTab: NSObject {
     private static func refreshSelection() {
         let isSimpleMode = !CachedUserDefaults.bool("multipleShortcutsEnabled")
 
-        // Simple mode: show only the simple editor, hide everything else
-        simpleModeEditorView?.isHidden = !isSimpleMode
+        // Hide ALL editors first
+        simpleModeEditorView?.isHidden = true
+        simpleGestureEditorView?.isHidden = true
+        defaultsEditorView?.isHidden = true
+        shortcutEditorViews.forEach { $0.isHidden = true }
+        gestureEditorView?.isHidden = true
+
         if isSimpleMode {
-            defaultsEditorView?.isHidden = true
-            shortcutEditorViews.forEach { $0.isHidden = true }
-            gestureEditorView?.isHidden = true
-            return
+            // Simple mode: direct editors
+            if selectedIndex == gestureSelectionIndex {
+                simpleGestureEditorView?.isHidden = false
+            } else {
+                // Default to Shortcut 1 for any non-gesture selection
+                selectedIndex = 0
+                simpleModeEditorView?.isHidden = false
+            }
+            // Sidebar selection highlights
+            shortcutRows.enumerated().forEach { $1.setSelected($0 == selectedIndex) }
+            simpleGestureSidebarRow?.setSelected(selectedIndex == gestureSelectionIndex)
+        } else {
+            // Multi mode: override editors (existing logic)
+            defaultsSidebarRow?.setSelected(selectedIndex == defaultsSelectionIndex)
+            defaultsEditorView?.isHidden = selectedIndex != defaultsSelectionIndex
+            shortcutRows.enumerated().forEach { $1.setSelected($0 == selectedIndex) }
+            shortcutEditorViews.enumerated().forEach { index, view in
+                view.isHidden = index != selectedIndex || index >= Preferences.shortcutCount
+            }
+            gestureSidebarRow?.setSelected(selectedIndex == gestureSelectionIndex)
+            gestureEditorView?.isHidden = selectedIndex != gestureSelectionIndex
+            refreshInheritedControlValues()
         }
-
-        // Multi mode: selection-based editor visibility
-        defaultsSidebarRow?.setSelected(selectedIndex == defaultsSelectionIndex)
-        defaultsEditorView?.isHidden = selectedIndex != defaultsSelectionIndex
-
-        // Shortcuts
-        shortcutRows.enumerated().forEach { $1.setSelected($0 == selectedIndex) }
-        shortcutEditorViews.enumerated().forEach { index, view in
-            view.isHidden = index != selectedIndex || index >= Preferences.shortcutCount
-        }
-
-        // Gesture
-        gestureSidebarRow?.setSelected(selectedIndex == gestureSelectionIndex)
-        gestureEditorView?.isHidden = selectedIndex != gestureSelectionIndex
-
-        // Sync inherited controls to current UserDefaults values
-        refreshInheritedControlValues()
     }
 
     /// Re-reads UserDefaults values into all non-overridden (inherited) controls.
@@ -1104,19 +1211,24 @@ class ShortcutsTab: NSObject {
     }
 
     private static func refreshGestureRow() {
-        guard let gestureSidebarRow else { return }
         let gestureIndex = Int(UserDefaults.standard.string(forKey: "nextWindowGesture") ?? "0") ?? 0
         let gesture = GesturePreference.allCases[safe: gestureIndex] ?? .disabled
-        gestureSidebarRow.setContent(
-            NSLocalizedString("Gesture", comment: ""),
-            gesture.localizedString)
-        gestureSidebarRow.setSelected(selectedIndex == gestureSelectionIndex)
+        let title = NSLocalizedString("Gesture", comment: "")
+        let summary = gesture.localizedString
+        gestureSidebarRow?.setContent(title, summary)
+        gestureSidebarRow?.setSelected(selectedIndex == gestureSelectionIndex)
+        simpleGestureSidebarRow?.setContent(title, summary)
+        simpleGestureSidebarRow?.setSelected(selectedIndex == gestureSelectionIndex)
     }
 
     // MARK: - Sidebar Helpers
 
     private static func shortcutTitle(_ index: Int) -> String {
-        NSLocalizedString("Shortcut", comment: "") + " " + String(index + 1)
+        let isSimpleMode = !CachedUserDefaults.bool("multipleShortcutsEnabled")
+        if isSimpleMode {
+            return NSLocalizedString("Shortcut", comment: "")
+        }
+        return NSLocalizedString("Shortcut", comment: "") + " " + String(index + 1)
     }
 
     private static func shortcutSummary(_ index: Int) -> String {
@@ -1210,95 +1322,198 @@ class ShortcutsTab: NSObject {
 
     // MARK: - Multiple Shortcuts Toggle
 
+    /// Indexed settings that have per-shortcut keys (via indexToName).
+    /// Excludes "showOnScreen" which is global, not per-shortcut.
+    private static let indexedSettingBaseNames = [
+        "appsToShow", "spacesToShow", "screensToShow",
+        "showMinimizedWindows", "showHiddenWindows", "showFullscreenWindows",
+        "showWindowlessApps", "windowOrder", "shortcutStyle",
+    ]
+
     @objc private static func multipleShortcutsToggled(_ sender: NSButton) {
         if sender.state == .on {
             enableMultipleShortcuts()
         } else {
-            disableMultipleShortcuts(sender)
+            disableMultipleShortcuts()
         }
     }
 
-    private static func enableMultipleShortcuts() {
-        Preferences.set("multipleShortcutsEnabled", "true")
-        setSidebarVisible(true)
+    private static func disableMultipleShortcuts() {
+        // 1. Save Defaults snapshot (true Defaults values, before pollution)
+        saveDefaultsSnapshot()
+        // 2. Resolve effective values for shortcuts 1+ and gesture into per-key storage
+        resolveOverridesToPerShortcutKeys()
+        // 3. Save and set shortcut count
+        Preferences.set("savedShortcutCount", String(Preferences.shortcutCount), false)
+        Preferences.set("shortcutCount", "1", false)
+        Preferences.set("multipleShortcutsEnabled", "false")
+        setMultiModeElements(visible: false)
+        selectedIndex = 0
         refreshUi()
     }
 
-    private static func disableMultipleShortcuts(_ checkbox: NSButton) {
-        let gestureValue = UserDefaults.standard.string(forKey: "nextWindowGesture") ?? GesturePreference.disabled.indexAsString
-        let gestureEnabled = gestureValue != GesturePreference.disabled.indexAsString
-        let hasMultipleShortcuts = Preferences.shortcutCount > 1
-        let hasOverrides = shortcut1HasAnyOverrides()
-
-        if !gestureEnabled && !hasMultipleShortcuts && !hasOverrides {
-            performDisableMultipleShortcuts()
+    private static func enableMultipleShortcuts() {
+        guard let savedSnapshot = loadSavedDefaultsSnapshot() else {
+            // First-time enable or no saved state — simple enable
+            Preferences.set("multipleShortcutsEnabled", "true")
+            let saved = CachedUserDefaults.int("savedShortcutCount")
+            if saved > 1 { Preferences.set("shortcutCount", String(saved), false) }
+            setMultiModeElements(visible: true)
+            selectedIndex = 0
+            refreshUi()
             return
         }
+        // 1. Capture Shortcut 0's current base key values (before restoring Defaults)
+        var shortcut0Values = [String: Int]()
+        for baseName in indexedSettingBaseNames {
+            shortcut0Values[baseName] = Int(UserDefaults.standard.string(forKey: baseName) ?? "0") ?? 0
+        }
+        // 2. Restore base keys from saved snapshot (fixes Defaults pollution from overrides)
+        for (key, value) in savedSnapshot {
+            Preferences.set(key, String(value), false)
+        }
+        // 3. Rebuild live snapshot
+        snapshotAllDefaults()
+        // 4. Restore shortcut count
+        let saved = CachedUserDefaults.int("savedShortcutCount")
+        if saved > 1 { Preferences.set("shortcutCount", String(saved), false) }
+        Preferences.set("multipleShortcutsEnabled", "true")
+        setMultiModeElements(visible: true)
+        // 5. Select Shortcut 1 (continues from simple mode's selection)
+        selectedIndex = 0
+        refreshUi()
+        // 6. Reconstruct overrides after UI is rebuilt
+        reconstructOverrides(savedSnapshot: savedSnapshot, shortcut0PreRestoreValues: shortcut0Values)
+    }
 
-        // Build warning listing what will be lost
-        let alert = NSAlert()
-        alert.alertStyle = .warning
-        alert.messageText = NSLocalizedString("Disable Multiple Shortcuts?", comment: "")
-        var warnings = [String]()
-        if hasMultipleShortcuts {
-            let extra = Preferences.shortcutCount - 1
-            warnings.append("• " + String(format: NSLocalizedString("%d extra shortcut(s) will be removed", comment: ""), extra))
-        }
-        if gestureEnabled {
-            warnings.append("• " + NSLocalizedString("Gesture trigger will be disabled", comment: ""))
-        }
-        if hasOverrides {
-            warnings.append("• " + NSLocalizedString("Custom overrides on Shortcut 1 will be reset", comment: ""))
-        }
-        alert.informativeText = warnings.joined(separator: "\n")
-        alert.addButton(withTitle: NSLocalizedString("Disable", comment: "")).setAccessibilityFocused(true)
-        let cancelButton = alert.addButton(withTitle: NSLocalizedString("Cancel", comment: ""))
-        cancelButton.keyEquivalent = "\u{1b}"
+    // MARK: - Override Resolution Helpers
 
-        if alert.runModal() == .alertFirstButtonReturn {
-            performDisableMultipleShortcuts()
-        } else {
-            checkbox.state = .on
+    private static func saveDefaultsSnapshot() {
+        if let data = try? JSONEncoder().encode(defaultsSnapshot),
+           let json = String(data: data, encoding: .utf8) {
+            Preferences.set("savedDefaultsSnapshot", json, false)
         }
     }
 
-    private static func performDisableMultipleShortcuts() {
-        // Disable gesture
-        Preferences.set("nextWindowGesture", GesturePreference.disabled.indexAsString)
-        // Remove extra shortcuts
-        let currentCount = Preferences.shortcutCount
-        for index in 1..<currentCount {
-            resetShortcutPreferences(index)
+    private static func loadSavedDefaultsSnapshot() -> [String: Int]? {
+        let json = UserDefaults.standard.string(forKey: "savedDefaultsSnapshot") ?? ""
+        guard let data = json.data(using: .utf8),
+              let snapshot = try? JSONDecoder().decode([String: Int].self, from: data) else { return nil }
+        return snapshot.isEmpty ? nil : snapshot
+    }
+
+    /// Reads effective values from multi-mode override editors and writes
+    /// them to per-shortcut/per-gesture UserDefaults keys.
+    private static func resolveOverridesToPerShortcutKeys() {
+        // Shortcuts 1+ (index 0 shares keys with Defaults — already correct)
+        for shortcutIndex in 1..<Preferences.shortcutCount {
+            guard shortcutIndex < shortcutEditorViews.count else { continue }
+            var rows = [OverridableRowView]()
+            findOverridableRows(in: shortcutEditorViews[shortcutIndex], result: &rows)
+            for row in rows {
+                guard let value = row.currentControlValue else { continue }
+                Preferences.set(row.settingName, String(value), false)
+            }
         }
-        Preferences.set("shortcutCount", "1")
-        // Reset Shortcut 1 overrides (UI state)
+        // Gesture
+        if let gestureEditorView {
+            var rows = [OverridableRowView]()
+            findOverridableRows(in: gestureEditorView, result: &rows)
+            for row in rows {
+                guard let value = row.currentControlValue else { continue }
+                Preferences.set(row.settingName, String(value), false)
+            }
+        }
+    }
+
+    /// Compares per-shortcut/gesture values to Defaults snapshot and sets
+    /// override state on each OverridableRowView accordingly.
+    private static func reconstructOverrides(savedSnapshot: [String: Int], shortcut0PreRestoreValues: [String: Int]) {
+        // Helper: find base name for an indexed setting key
+        func baseName(for settingName: String) -> String? {
+            // For index 0: settingName == baseName (e.g., "appsToShow")
+            if indexedSettingBaseNames.contains(settingName) { return settingName }
+            // For index 1+: settingName has suffix (e.g., "appsToShow2")
+            return indexedSettingBaseNames.first { settingName.hasPrefix($0) && settingName != $0 }
+        }
+
+        // Shortcut 0: compare pre-restore base key values to snapshot
         if let editor = shortcutEditorViews.first {
             var rows = [OverridableRowView]()
             findOverridableRows(in: editor, result: &rows)
             for row in rows {
-                row.setOverridden(false)
+                guard let base = baseName(for: row.settingName) else {
+                    row.setOverridden(false)
+                    continue
+                }
+                let preRestoreValue = shortcut0PreRestoreValues[base] ?? 0
+                let defaultsValue = savedSnapshot[base] ?? 0
+                if preRestoreValue != defaultsValue {
+                    row.setControlValue(preRestoreValue)
+                    row.setOverridden(true)
+                } else {
+                    row.setOverridden(false)
+                }
             }
         }
-        Preferences.set("multipleShortcutsEnabled", "false")
-        setSidebarVisible(false)
-        selectedIndex = defaultsSelectionIndex
-        refreshUi()
+
+        // Shortcuts 1+: compare per-shortcut keys to snapshot
+        for shortcutIndex in 1..<Preferences.shortcutCount {
+            guard shortcutIndex < shortcutEditorViews.count else { continue }
+            var rows = [OverridableRowView]()
+            findOverridableRows(in: shortcutEditorViews[shortcutIndex], result: &rows)
+            for row in rows {
+                guard let base = baseName(for: row.settingName) else {
+                    row.setOverridden(false)
+                    continue
+                }
+                let perShortcutValue = Int(UserDefaults.standard.string(forKey: row.settingName) ?? "0") ?? 0
+                let defaultsValue = savedSnapshot[base] ?? 0
+                if perShortcutValue != defaultsValue {
+                    row.setControlValue(perShortcutValue)
+                    row.setOverridden(true)
+                } else {
+                    row.setOverridden(false)
+                }
+            }
+        }
+
+        // Gesture: compare per-gesture keys to snapshot
+        if let gestureEditorView {
+            var rows = [OverridableRowView]()
+            findOverridableRows(in: gestureEditorView, result: &rows)
+            for row in rows {
+                guard let base = baseName(for: row.settingName) else {
+                    row.setOverridden(false)
+                    continue
+                }
+                let perGestureValue = Int(UserDefaults.standard.string(forKey: row.settingName) ?? "0") ?? 0
+                let defaultsValue = savedSnapshot[base] ?? 0
+                if perGestureValue != defaultsValue {
+                    row.setControlValue(perGestureValue)
+                    row.setOverridden(true)
+                } else {
+                    row.setOverridden(false)
+                }
+            }
+        }
     }
 
-    private static func shortcut1HasAnyOverrides() -> Bool {
-        guard let editor = shortcutEditorViews.first else { return false }
-        var rows = [OverridableRowView]()
-        findOverridableRows(in: editor, result: &rows)
-        return rows.contains { $0.isOverridden }
-    }
-
-    private static func setSidebarVisible(_ visible: Bool) {
-        sidebarView?.isHidden = !visible
-        sidebarSeparator?.isHidden = !visible
-        sidebarWidthConstraint?.constant = visible ? shortcutSidebarWidth : 0
-        separatorWidthConstraint?.constant = visible ? 1 : 0
-        // Toggle grey box styling: bordered in multi mode, transparent in simple mode
-        shortcutsContentView?.layer?.borderWidth = visible ? TableGroupView.borderWidth : 0
-        shortcutsContentView?.layer?.backgroundColor = visible ? NSColor.tableBackgroundColor.cgColor : NSColor.clear.cgColor
+    private static func setMultiModeElements(visible: Bool) {
+        defaultsSidebarRow?.isHidden = !visible
+        defaultsSidebarSeparator?.isHidden = !visible
+        buttonsRowView?.isHidden = !visible
+        // Fixed gesture section: visible in multi mode, hidden in simple mode
+        // (simple mode puts gesture in the scrollable rows stack instead)
+        gestureSidebarSeparator?.isHidden = !visible
+        gestureSidebarRow?.isHidden = !visible
+        // Swap layout constraints so hidden elements don't reserve space
+        if visible {
+            NSLayoutConstraint.deactivate(simpleModeConstraints)
+            NSLayoutConstraint.activate(multiModeConstraints)
+        } else {
+            NSLayoutConstraint.deactivate(multiModeConstraints)
+            NSLayoutConstraint.activate(simpleModeConstraints)
+        }
     }
 }
