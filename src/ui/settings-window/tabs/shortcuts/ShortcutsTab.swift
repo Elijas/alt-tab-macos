@@ -501,7 +501,22 @@ class ShortcutsTab: NSObject {
 
         let table = TableGroupView(width: width)
 
+        // Inheritance hint
+        let hint = NSTextField(labelWithString: NSLocalizedString(
+            "Greyed-out settings are inherited from Defaults. Click any to customize it for this shortcut, or ↺ to reset.", comment: ""))
+        hint.font = NSFont.systemFont(ofSize: 11)
+        hint.textColor = .tertiaryLabelColor
+        hint.lineBreakMode = .byWordWrapping
+        hint.preferredMaxLayoutWidth = width - 20
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        let hintWrapper = NSStackView(views: [hint])
+        hintWrapper.orientation = .vertical
+        hintWrapper.alignment = .leading
+        hintWrapper.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 2, right: 0)
+        table.addRow(leftViews: [hintWrapper], rightViews: nil)
+
         // TRIGGER section (not overridable — always per-shortcut)
+        table.addNewTable()
         let holdName = Preferences.indexToName("holdShortcut", index)
         let holdValue = UserDefaults.standard.string(forKey: holdName) ?? ""
         var holdShortcut = LabelAndControl.makeLabelWithRecorder(
@@ -515,21 +530,6 @@ class ShortcutsTab: NSObject {
             labelPosition: .right)
         table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Trigger", comment: ""),
             rightViews: holdShortcut + [nextWindowShortcut[0]]))
-
-        // Inheritance hint + reset all button
-        let hint = NSTextField(labelWithString: NSLocalizedString(
-            "Greyed-out settings are inherited from Defaults. Click any to customize it for this shortcut, or ↺ to reset.", comment: ""))
-        hint.font = NSFont.systemFont(ofSize: 11)
-        hint.textColor = .tertiaryLabelColor
-        hint.lineBreakMode = .byWordWrapping
-        hint.preferredMaxLayoutWidth = width - 20
-        hint.translatesAutoresizingMaskIntoConstraints = false
-        let hintWrapper = NSStackView(views: [hint])
-        hintWrapper.orientation = .vertical
-        hintWrapper.alignment = .leading
-        hintWrapper.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 2, right: 0)
-        table.addNewTable()
-        table.addRow(leftViews: [hintWrapper], rightViews: nil)
 
         // APPEARANCE section (overridable)
         table.addNewTable()
@@ -644,10 +644,7 @@ class ShortcutsTab: NSObject {
         gestureWithTooltip.alignment = .centerY
         gestureWithTooltip.setViews([gesture], in: .trailing)
         gestureWithTooltip.setViews([infoBtn], in: .leading)
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Trigger", comment: ""),
-            rightViews: [gestureWithTooltip]))
-
-        // Inheritance hint + reset all button
+        // Inheritance hint
         let gestureHint = NSTextField(labelWithString: NSLocalizedString(
             "Greyed-out settings are inherited from Defaults. Click any to customize it for this gesture, or ↺ to reset.", comment: ""))
         gestureHint.font = NSFont.systemFont(ofSize: 11)
@@ -659,8 +656,12 @@ class ShortcutsTab: NSObject {
         gestureHintWrapper.orientation = .vertical
         gestureHintWrapper.alignment = .leading
         gestureHintWrapper.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 2, right: 0)
-        table.addNewTable()
         table.addRow(leftViews: [gestureHintWrapper], rightViews: nil)
+
+        // TRIGGER section (gesture-specific, not overridable)
+        table.addNewTable()
+        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Trigger", comment: ""),
+            rightViews: [gestureWithTooltip]))
 
         // FILTERING section (overridable)
         table.addNewTable()
@@ -699,6 +700,10 @@ class ShortcutsTab: NSObject {
             settingName: Preferences.indexToName("windowOrder", index),
             label: NSLocalizedString("Order windows by", comment: ""),
             preferences: WindowOrderPreference.allCases, section: "Filtering")
+
+        // Footer
+        table.addNewTable()
+        table.addRow(leftViews: [footerLabel], rightViews: [gestureResetAllButton])
 
         return table
     }
@@ -939,9 +944,11 @@ class ShortcutsTab: NSObject {
 
     private static func refreshGestureRow() {
         guard let gestureSidebarRow else { return }
+        let gestureIndex = Int(UserDefaults.standard.string(forKey: "nextWindowGesture") ?? "0") ?? 0
+        let gesture = GesturePreference.allCases[safe: gestureIndex] ?? .disabled
         gestureSidebarRow.setContent(
             NSLocalizedString("Gesture", comment: ""),
-            Preferences.nextWindowGesture.localizedString)
+            gesture.localizedString)
         gestureSidebarRow.setSelected(selectedIndex == gestureSelectionIndex)
     }
 
