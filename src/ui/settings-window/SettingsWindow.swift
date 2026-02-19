@@ -691,7 +691,7 @@ class SettingsWindow: NSWindow {
     private func sectionDefinitions() -> [SettingsSectionDefinition] {
         [
             SettingsSectionDefinition(id: "shortcuts", title: NSLocalizedString("Shortcuts", comment: ""), imageName: "controls", systemSymbolName: "command", view: ShortcutsTab.initTab()),
-            SettingsSectionDefinition(id: "controls", title: NSLocalizedString("Controls", comment: ""), imageName: "controls", systemSymbolName: "slider.horizontal.3", view: ControlsSection.initTab()),
+            SettingsSectionDefinition(id: "controls", title: NSLocalizedString("Controls", comment: ""), imageName: "controls", systemSymbolName: "keyboard", view: ControlsSection.initTab()),
             SettingsSectionDefinition(id: "general", title: NSLocalizedString("General", comment: ""), imageName: "general", systemSymbolName: "gearshape", view: GeneralTab.initTab()),
             SettingsSectionDefinition(id: "policies", title: NSLocalizedString("Policies", comment: ""), imageName: "policies", systemSymbolName: "antenna.radiowaves.left.and.right", view: PoliciesTab.initTab()),
             SettingsSectionDefinition(id: "blacklists", title: NSLocalizedString("Blacklists", comment: ""), imageName: "blacklists", systemSymbolName: "hand.raised", view: BlacklistsTab.initTab()),
