@@ -1,134 +1,481 @@
-# Plan: "Enable Multiple Shortcuts and Gestures" Checkbox
+# Plan V3: "Enable Multiple Shortcuts" Checkbox — Smart Override Resolution
 
 ## Context
 
-The shortcuts tab currently always shows the full multi-shortcut UI (sidebar with Defaults, Shortcut 1-N, Gesture). We want to add a checkbox above the tabbed box that toggles between simple mode (single shortcut, no sidebar) and advanced mode (current multi-shortcut UI). This makes the default experience simpler for users who only need one shortcut.
+V2 implemented the always-visible sidebar approach, but the user found several issues:
+1. **Layout**: Gesture row stuck at bottom of sidebar with a big gap — should be adjacent to Shortcut row, both top-aligned
+2. **Naming**: "Shortcut 1" should be "Shortcut" in simple mode (no number when there's only one)
+3. **Checkbox label**: Should be "Enable multiple shortcuts" (not "Enable Multiple Shortcuts and Gestures")
+4. **Gesture editor**: Should show ALL settings (trigger + filtering), not trigger-only
+5. **Smart override resolution**: Toggle should preserve Defaults, resolve values for Shortcut/Gesture, and reconstruct overrides on re-enable
 
-## Behavior Summary
+### Critical Architecture Detail
 
-- **Checkbox unchecked** (simple mode): No sidebar, no Defaults/Gesture split. Just a flat editor for the single shortcut ("Shortcut 0" conceptually — the Defaults settings ARE the shortcut).
-- **Checkbox checked** (multi mode): Current UI — sidebar with Defaults, Shortcut 1+, Gesture.
-- **Enabling** (unchecked → checked): Current single-shortcut settings move into "Defaults". A new "Shortcut 1" is created with all defaults (no overrides).
-- **Disabling** (checked → unchecked):
-  - **No modal needed** if: gestures disabled AND only Shortcut 1 exists AND Shortcut 1 has all defaults (no overrides).
-  - **Modal warning** otherwise, listing what will be lost:
-    - Extra shortcuts (if shortcutCount > 1)
-    - Gesture settings (if gesture != disabled)
-    - Per-shortcut overrides (if any exist on Shortcut 1)
-  - On confirm: collapse back to simple mode, keep Defaults values as the single shortcut.
+`Preferences.indexToName("x", 0)` returns `"x"` (no suffix). This means **Shortcut 0 and Defaults share the same UserDefaults keys**. Index 1 → `"x2"`, index 9 (gesture) → `"x10"`. This shapes the entire toggle design — we must save/restore a "Defaults snapshot" to preserve true Defaults values through Shortcut 0's override pollution.
+
+## Design
+
+### Simple Mode (checkbox unchecked — default)
+- **Sidebar**: "Shortcut" and "Gesture" top-aligned in scrollable rows stack (no gap)
+- **Hidden**: Defaults row, Defaults separator, +/- buttons, fixed gesture section (separator + row)
+- **Editors**:
+  - Shortcut → `simpleModeEditorView` (Trigger + Appearance + Filtering + Behavior + Multiple Screens — already uses correct keys since index 0 = base key)
+  - Gesture → `simpleGestureEditorView` (Trigger + Filtering with per-gesture keys like `appsToShow10`)
+- **Checkbox label**: "Enable multiple shortcuts"
+
+### Multi Mode (checkbox checked)
+- **Sidebar**: "Defaults" at top, "Shortcut 1-N" in scrollable area, "Gesture" fixed at bottom, +/- buttons
+- **Editors**: Override-wrapped editors (unchanged from V2)
+
+### Toggle: Disable (multi → simple)
+
+1. Save `defaultsSnapshot` to UserDefaults as JSON key `"savedDefaultsSnapshot"`
+2. **Resolve** effective values for shortcuts 1+ and gesture into their per-shortcut/gesture keys
+   - For each OverridableRowView: read control's current display value → write to per-key
+   - Shortcut 0: skip (shares base keys, already has effective values)
+3. Save shortcutCount to `savedShortcutCount`, set shortcutCount to 1
+4. Hide multi-mode elements, select Shortcut, refreshUi
+
+### Toggle: Enable (simple → multi)
+
+1. Load saved snapshot from `"savedDefaultsSnapshot"`
+2. **Capture** Shortcut 0's current base key values (before restoring)
+3. **Restore** base keys from saved snapshot (fixes Defaults pollution from overrides)
+4. Rebuild live `defaultsSnapshot` via `snapshotAllDefaults()`
+5. Restore shortcutCount from `savedShortcutCount`
+6. **Reconstruct overrides** for all shortcuts and gesture:
+   - Shortcut 0: compare pre-restore values to snapshot → if different = override
+   - Shortcuts 1+: compare per-shortcut key to snapshot → if different = override
+   - Gesture: compare per-gesture key to snapshot → if different = override
+   - For overrides: `setControlValue()` + `setOverridden(true)`
+   - For inherited: `setOverridden(false)` (refreshControl restores Defaults value)
+7. Show multi-mode elements, select Defaults, refreshUi
+
+### Example Walkthrough
+
+**Multi mode state:** Defaults A=1 B=2, Shortcut1 A=inherit B=override(3), Gesture A=override(5) B=inherit
+
+**Disable:**
+- Save snapshot: {A:1, B:2}
+- Shortcut 0: base keys have A=1, B=3 (B polluted by override) — skip
+- Gesture: resolve A=5→`appsToShow10`, B=2→per-gesture key
+- Simple mode shows: Shortcut A=1 B=3, Gesture A=5 B=2 ✓
+
+**Re-enable (user didn't change anything):**
+- Pre-restore base keys: A=1, B=3
+- Restore from snapshot: base keys → A=1, B=2
+- Shortcut 0: A: 1==1→inherited, B: 3!=2→override(3) ✓
+- Gesture: A: 5!=1→override(5), B: 2==2→inherited ✓
+- Defaults shows: A=1, B=2 ✓
+
+**Accepted loss:** An override deliberately set to match Defaults becomes inherited on re-enable.
 
 ## Files to Modify
 
-1. **`src/logic/Preferences.swift`** — Add `"multipleShortcutsEnabled"` preference (default: `"false"`)
+1. **`src/ui/settings-window/tabs/shortcuts/OverridableRow.swift`** — Add public accessors for control value
 2. **`src/ui/settings-window/tabs/shortcuts/ShortcutsTab.swift`** — Main changes
+3. **`src/logic/Preferences.swift`** — Add `savedDefaultsSnapshot` default
 
-## Implementation
+## Implementation Steps
 
-### Step 1: Add Preference Key
+### Step 1: Add Control Value Accessors to OverridableRowView
 
-In `Preferences.swift`, add to `defaultValues`:
-```swift
-"multipleShortcutsEnabled": "false",
-```
-
-### Step 2: Add Checkbox Above the Tabbed Box
-
-In `ShortcutsTab.initTab()`, create a checkbox and place it before the `shortcutsView` in the `TableGroupSetView`:
+In `OverridableRow.swift`, add two methods to `OverridableRowView`:
 
 ```swift
-static func initTab() -> NSView {
-    // ... existing editor creation ...
-    let shortcutsView = makeShortcutsView()
-    let checkbox = NSButton(checkboxWithTitle: NSLocalizedString("Enable Multiple Shortcuts and Gestures", comment: ""), target: self, action: #selector(multipleShortcutsToggled(_:)))
-    checkbox.state = CachedUserDefaults.bool("multipleShortcutsEnabled") ? .on : .off
-    multipleShortcutsCheckbox = checkbox
-    let view = TableGroupSetView(originalViews: [checkbox, shortcutsView],
-        bottomPadding: 0, othersAlignment: .leading)
-    // ...
+var currentControlValue: Int? {
+    if let dropdown = wrappedControl as? NSPopUpButton {
+        return dropdown.indexOfSelectedItem
+    } else if let segmented = wrappedControl as? NSSegmentedControl {
+        return segmented.selectedSegment
+    }
+    return nil
+}
+
+func setControlValue(_ index: Int) {
+    if let dropdown = wrappedControl as? NSPopUpButton, index >= 0, index < dropdown.numberOfItems {
+        dropdown.selectItem(at: index)
+    } else if let segmented = wrappedControl as? NSSegmentedControl, index >= 0, index < segmented.segmentCount {
+        segmented.selectedSegment = index
+    }
 }
 ```
 
-Store references:
+### Step 2: Add `savedDefaultsSnapshot` Preference
+
+In `Preferences.swift` `defaultValues`, add:
 ```swift
-private static var multipleShortcutsCheckbox: NSButton?
-private static var shortcutsContentView: ShortcutsContentView? // ref to toggle visibility
+"savedDefaultsSnapshot": "",
 ```
 
-### Step 3: Toggle Handler with Modal Logic
+### Step 3: Rename Checkbox Label
 
-Add `@objc multipleShortcutsToggled(_:)` method:
+In `initTab()` (line 210), change:
+```swift
+"Enable Multiple Shortcuts and Gestures"  →  "Enable multiple shortcuts"
+```
 
-**When enabling (unchecked → checked):**
-1. Set `"multipleShortcutsEnabled"` to `"true"`
-2. Show the multi-shortcut UI (unhide `shortcutsContentView`)
-3. Current single shortcut settings are already in "Defaults" keys — they stay
-4. Ensure shortcutCount is at least 1 (it already is by default)
-5. Call `refreshUi()`
+### Step 4: Mode-Aware Shortcut Naming
 
-**When disabling (checked → unchecked):**
-1. Check if modal is needed:
-   - `gestureEnabled = UserDefaults.standard.string(forKey: "nextWindowGesture") != GesturePreference.disabled.indexAsString`
-   - `hasMultipleShortcuts = Preferences.shortcutCount > 1`
-   - `hasOverrides = shortcut1HasAnyOverrides()` — check if any per-shortcut key for index 0 differs from the Defaults key
-2. If none of these → skip modal, just disable
-3. If any → show `NSAlert`:
-   - `messageText`: "Disable Multiple Shortcuts?"
-   - `informativeText`: Build dynamically from what will be lost:
-     - "• N extra shortcut(s) will be removed" (if hasMultipleShortcuts)
-     - "• Gesture trigger will be disabled" (if gestureEnabled)
-     - "• Custom overrides on Shortcut 1 will be reset" (if hasOverrides)
-   - Buttons: "Disable" (destructive), "Cancel"
-4. On confirm:
-   - Reset gesture to disabled: `Preferences.set("nextWindowGesture", GesturePreference.disabled.indexAsString)`
-   - Remove extra shortcuts (set shortcutCount to 1, clear their prefs)
-   - Reset Shortcut 1 overrides (remove per-shortcut keys so they inherit Defaults)
-   - Set `"multipleShortcutsEnabled"` to `"false"`
-   - Hide the multi-shortcut UI
-   - Call `refreshUi()`
-5. On cancel: revert checkbox to `.on`
+Change `shortcutTitle(_:)` to check mode:
+```swift
+private static func shortcutTitle(_ index: Int) -> String {
+    let isSimpleMode = !CachedUserDefaults.bool("multipleShortcutsEnabled")
+    if isSimpleMode {
+        return NSLocalizedString("Shortcut", comment: "")
+    }
+    return NSLocalizedString("Shortcut", comment: "") + " " + String(index + 1)
+}
+```
 
-### Step 4: UI Visibility Toggle
+### Step 5: Sidebar Layout — Gesture in Scrollable Rows (Simple Mode)
 
-When `multipleShortcutsEnabled` is false, hide the `ShortcutsContentView` (the sidebar+editor panel). The Defaults editor settings are still the active settings since there's only one shortcut and it inherits everything from Defaults.
+**New static vars:**
+```swift
+private static var simpleGestureSidebarRow: ShortcutSidebarRow?
+private static var gestureSidebarSeparator: NSView?
+```
 
-KNOWN UNKNOWN: Whether "simple mode" should show a simplified inline editor (just the Trigger + Defaults sections without the sidebar), or whether hiding the entire panel is sufficient. For V1, hiding the entire multi-shortcut panel is simplest — the user already sees their shortcut configured via the Defaults values. We can add an inline simple editor later if needed.
+**Store gesture separator ref** in `makeShortcutSidebar()` — the separator above the gesture row.
 
-### Step 5: Helper — Check for Overrides on Shortcut 1
+**Update `setMultiModeElements(visible:)`** — also toggle the fixed gesture section:
+```swift
+private static func setMultiModeElements(visible: Bool) {
+    defaultsSidebarRow?.isHidden = !visible
+    defaultsSidebarSeparator?.isHidden = !visible
+    buttonsRowView?.isHidden = !visible
+    // Fixed gesture section: visible in multi mode, hidden in simple mode
+    // (simple mode puts gesture in the scrollable rows stack)
+    gestureSidebarSeparator?.isHidden = !visible
+    gestureSidebarRow?.isHidden = !visible
+}
+```
+
+**Update `refreshShortcutRows()`** — in simple mode, add gesture row to the stack:
+```swift
+private static func refreshShortcutRows() {
+    guard let rows = shortcutRowsStackView else { return }
+    clearArrangedSubviews(rows)
+    shortcutRows.removeAll(keepingCapacity: true)
+    simpleGestureSidebarRow = nil
+    let isSimpleMode = !CachedUserDefaults.bool("multipleShortcutsEnabled")
+    for index in 0..<Preferences.shortcutCount {
+        let row = ShortcutSidebarRow()
+        row.setContent(shortcutTitle(index), shortcutSummary(index))
+        // ... same click/hover handlers ...
+        rows.addArrangedSubview(row)
+        // ... same constraints + separators ...
+        shortcutRows.append(row)
+        if index < Preferences.shortcutCount - 1 { /* separator */ }
+    }
+    // Simple mode: add gesture row to the stack (top-aligned with shortcut)
+    if isSimpleMode {
+        // Separator
+        let sep = NSView()
+        sep.translatesAutoresizingMaskIntoConstraints = false
+        sep.wantsLayer = true
+        sep.layer?.backgroundColor = NSColor.tableSeparatorColor.cgColor
+        rows.addArrangedSubview(sep)
+        sep.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
+        sep.heightAnchor.constraint(equalToConstant: TableGroupView.borderWidth).isActive = true
+        // Gesture row
+        let gestureRow = ShortcutSidebarRow()
+        let gestureIndex = Int(UserDefaults.standard.string(forKey: "nextWindowGesture") ?? "0") ?? 0
+        let gesture = GesturePreference.allCases[safe: gestureIndex] ?? .disabled
+        gestureRow.setContent(NSLocalizedString("Gesture", comment: ""), gesture.localizedString)
+        gestureRow.onClick = { _, _ in selectGesture() }
+        gestureRow.onMouseEntered = { _, _ in gestureRow.setHovered(true) }
+        gestureRow.onMouseExited = { _, _ in gestureRow.setHovered(false) }
+        rows.addArrangedSubview(gestureRow)
+        gestureRow.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
+        gestureRow.heightAnchor.constraint(equalToConstant: sidebarRowHeight).isActive = true
+        simpleGestureSidebarRow = gestureRow
+    }
+}
+```
+
+**Update `refreshSelection()`** — also set `simpleGestureSidebarRow` selection:
+```swift
+if isSimpleMode {
+    // ...existing logic...
+    simpleGestureSidebarRow?.setSelected(selectedIndex == gestureSelectionIndex)
+}
+```
+
+**Update `refreshGestureRow()`** — also update `simpleGestureSidebarRow`:
+```swift
+simpleGestureSidebarRow?.setContent(title, summary)
+simpleGestureSidebarRow?.setSelected(selectedIndex == gestureSelectionIndex)
+```
+
+### Step 6: Expand Simple Gesture Editor (Trigger + Filtering)
+
+Replace the trigger-only `makeSimpleGestureEditor()` with trigger + filtering using per-gesture keys:
 
 ```swift
-private static func shortcut1HasAnyOverrides() -> Bool {
-    let index = 0
-    for baseName in perShortcutPreferences {
-        let perKey = Preferences.indexToName(baseName, index)
-        let defaultKey = baseName
-        // If per-shortcut key exists and differs from default, it's an override
-        if let perValue = UserDefaults.standard.string(forKey: perKey),
-           let defaultValue = UserDefaults.standard.string(forKey: defaultKey),
-           perValue != defaultValue {
-            return true
+private static func makeSimpleGestureEditor() -> NSView {
+    let width = shortcutEditorWidth
+    let gestureIdx = Preferences.gestureIndex
+    let table = TableGroupView(width: width)
+
+    // TRIGGER section
+    table.addNewTable()
+    let gesture = LabelAndControl.makeDropdown("nextWindowGesture", GesturePreference.allCases)
+    // ... info button + popover (same as current) ...
+    table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Trigger", comment: ""),
+        rightViews: [gestureWithTooltip]))
+
+    // FILTERING section — bound to per-gesture keys
+    table.addNewTable()
+    table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Filtering", comment: ""), bold: true)], rightViews: nil)
+    table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from applications", comment: ""))],
+        rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("appsToShow", gestureIdx), AppsToShowPreference.allCases)])
+    table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from Spaces", comment: ""))],
+        rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("spacesToShow", gestureIdx), SpacesToShowPreference.allCases)])
+    table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from screens", comment: ""))],
+        rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("screensToShow", gestureIdx), ScreensToShowPreference.allCases)])
+    table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show minimized windows", comment: ""),
+        rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("showMinimizedWindows", gestureIdx), ShowHowPreference.allCases)]))
+    table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show hidden windows", comment: ""),
+        rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("showHiddenWindows", gestureIdx), ShowHowPreference.allCases)]))
+    table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show fullscreen windows", comment: ""),
+        rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("showFullscreenWindows", gestureIdx),
+            ShowHowPreference.allCases.filter { $0 != .showAtTheEnd })]))
+    table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show apps with no open window", comment: ""),
+        rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("showWindowlessApps", gestureIdx), ShowHowPreference.allCases)]))
+    table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Order windows by", comment: ""),
+        rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("windowOrder", gestureIdx), WindowOrderPreference.allCases)]))
+
+    return table
+}
+```
+
+### Step 7: Override Resolution Helpers
+
+Add to `ShortcutsTab.swift`:
+
+```swift
+/// Indexed settings that have per-shortcut keys (via indexToName)
+private static let indexedSettingBaseNames = [
+    "appsToShow", "spacesToShow", "screensToShow",
+    "showMinimizedWindows", "showHiddenWindows", "showFullscreenWindows",
+    "showWindowlessApps", "windowOrder", "shortcutStyle",
+]
+
+private static func saveDefaultsSnapshot() {
+    if let data = try? JSONEncoder().encode(defaultsSnapshot),
+       let json = String(data: data, encoding: .utf8) {
+        Preferences.set("savedDefaultsSnapshot", json, false)
+    }
+}
+
+private static func loadSavedDefaultsSnapshot() -> [String: Int]? {
+    let json = UserDefaults.standard.string(forKey: "savedDefaultsSnapshot") ?? ""
+    guard let data = json.data(using: .utf8),
+          let snapshot = try? JSONDecoder().decode([String: Int].self, from: data) else { return nil }
+    return snapshot.isEmpty ? nil : snapshot
+}
+
+/// Reads effective values from multi-mode override editors and writes
+/// them to per-shortcut/per-gesture UserDefaults keys.
+private static func resolveOverridesToPerShortcutKeys() {
+    // Shortcuts 1+ (index 0 shares keys with Defaults — already correct)
+    for shortcutIndex in 1..<Preferences.shortcutCount {
+        guard shortcutIndex < shortcutEditorViews.count else { continue }
+        var rows = [OverridableRowView]()
+        findOverridableRows(in: shortcutEditorViews[shortcutIndex], result: &rows)
+        for row in rows {
+            guard let value = row.currentControlValue else { continue }
+            Preferences.set(row.settingName, String(value), false)
         }
     }
-    return false
+    // Gesture
+    if let gestureEditorView {
+        var rows = [OverridableRowView]()
+        findOverridableRows(in: gestureEditorView, result: &rows)
+        for row in rows {
+            guard let value = row.currentControlValue else { continue }
+            Preferences.set(row.settingName, String(value), false)
+        }
+    }
+}
+
+/// Compares per-shortcut/gesture values to Defaults snapshot and sets
+/// override state on each OverridableRowView accordingly.
+private static func reconstructOverrides(savedSnapshot: [String: Int], shortcut0PreRestoreValues: [String: Int]) {
+    // Helper: find base name for an indexed setting key
+    func baseName(for settingName: String) -> String? {
+        // For index 0: settingName == baseName (e.g., "appsToShow")
+        if indexedSettingBaseNames.contains(settingName) { return settingName }
+        // For index 1+: settingName has suffix (e.g., "appsToShow2")
+        return indexedSettingBaseNames.first { settingName.hasPrefix($0) && settingName != $0 }
+    }
+
+    // Shortcut 0: compare pre-restore base key values to snapshot
+    if let editor = shortcutEditorViews.first {
+        var rows = [OverridableRowView]()
+        findOverridableRows(in: editor, result: &rows)
+        for row in rows {
+            guard let base = baseName(for: row.settingName) else {
+                row.setOverridden(false) // Non-indexed (appearance, showOnScreen): inherited
+                continue
+            }
+            let preRestoreValue = shortcut0PreRestoreValues[base] ?? 0
+            let defaultsValue = savedSnapshot[base] ?? 0
+            if preRestoreValue != defaultsValue {
+                row.setControlValue(preRestoreValue)
+                row.setOverridden(true)
+            } else {
+                row.setOverridden(false)
+            }
+        }
+    }
+
+    // Shortcuts 1+: compare per-shortcut keys to snapshot
+    for shortcutIndex in 1..<Preferences.shortcutCount {
+        guard shortcutIndex < shortcutEditorViews.count else { continue }
+        var rows = [OverridableRowView]()
+        findOverridableRows(in: shortcutEditorViews[shortcutIndex], result: &rows)
+        for row in rows {
+            guard let base = baseName(for: row.settingName) else {
+                row.setOverridden(false)
+                continue
+            }
+            let perShortcutValue = Int(UserDefaults.standard.string(forKey: row.settingName) ?? "0") ?? 0
+            let defaultsValue = savedSnapshot[base] ?? 0
+            if perShortcutValue != defaultsValue {
+                row.setControlValue(perShortcutValue)
+                row.setOverridden(true)
+            } else {
+                row.setOverridden(false)
+            }
+        }
+    }
+
+    // Gesture: compare per-gesture keys to snapshot
+    if let gestureEditorView {
+        var rows = [OverridableRowView]()
+        findOverridableRows(in: gestureEditorView, result: &rows)
+        for row in rows {
+            guard let base = baseName(for: row.settingName) else {
+                row.setOverridden(false)
+                continue
+            }
+            let perGestureValue = Int(UserDefaults.standard.string(forKey: row.settingName) ?? "0") ?? 0
+            let defaultsValue = savedSnapshot[base] ?? 0
+            if perGestureValue != defaultsValue {
+                row.setControlValue(perGestureValue)
+                row.setOverridden(true)
+            } else {
+                row.setOverridden(false)
+            }
+        }
+    }
 }
 ```
 
-## Existing Patterns Reused
+### Step 8: Rewrite Toggle Handlers
 
-- **NSAlert pattern**: Matches `ControlsTab.swift:790-801` (`.warning` style, destructive first button, cancel with Escape key equivalent)
-- **Checkbox creation**: `NSButton(checkboxWithTitle:target:action:)` as in `LabelAndControl.swift:118`
-- **Preference storage**: `CachedUserDefaults.bool()` / `Preferences.set()` as used throughout
-- **TableGroupSetView**: Non-TableGroupView items (like the checkbox) go into the `continuousOthers` horizontal stack with leading alignment — already handled by the existing layout logic
-- **Shortcut removal**: Reuse existing `resetShortcutPreferences()` and `perShortcutPreferences`
+```swift
+private static func disableMultipleShortcuts() {
+    // 1. Save Defaults snapshot (true Defaults values, before pollution)
+    saveDefaultsSnapshot()
+    // 2. Resolve effective values for shortcuts 1+ and gesture
+    resolveOverridesToPerShortcutKeys()
+    // 3. Save and set shortcut count
+    Preferences.set("savedShortcutCount", String(Preferences.shortcutCount), false)
+    Preferences.set("shortcutCount", "1", false)
+    Preferences.set("multipleShortcutsEnabled", "false")
+    setMultiModeElements(visible: false)
+    selectedIndex = 0
+    refreshUi()
+}
+
+private static func enableMultipleShortcuts() {
+    guard let savedSnapshot = loadSavedDefaultsSnapshot() else {
+        // First-time enable or no saved state
+        Preferences.set("multipleShortcutsEnabled", "true")
+        let saved = CachedUserDefaults.int("savedShortcutCount")
+        if saved > 1 { Preferences.set("shortcutCount", String(saved), false) }
+        setMultiModeElements(visible: true)
+        selectedIndex = defaultsSelectionIndex
+        refreshUi()
+        return
+    }
+    // 1. Capture Shortcut 0's current values (before restoring Defaults)
+    var shortcut0Values = [String: Int]()
+    for baseName in indexedSettingBaseNames {
+        shortcut0Values[baseName] = Int(UserDefaults.standard.string(forKey: baseName) ?? "0") ?? 0
+    }
+    // 2. Restore base keys from saved snapshot (fixes Defaults pollution)
+    for (key, value) in savedSnapshot {
+        Preferences.set(key, String(value), false)
+    }
+    // 3. Rebuild live snapshot
+    snapshotAllDefaults()
+    // 4. Restore shortcut count
+    let saved = CachedUserDefaults.int("savedShortcutCount")
+    if saved > 1 { Preferences.set("shortcutCount", String(saved), false) }
+    Preferences.set("multipleShortcutsEnabled", "true")
+    // 5. Reconstruct overrides
+    reconstructOverrides(savedSnapshot: savedSnapshot, shortcut0PreRestoreValues: shortcut0Values)
+    setMultiModeElements(visible: true)
+    selectedIndex = defaultsSelectionIndex
+    refreshUi()
+}
+```
+
+### Step 9: Update initTab() for Simple Mode Gesture Resolution
+
+On first load in simple mode, gesture per-keys might not have resolved values yet. Add resolution to `initTab()`:
+
+```swift
+if !isMultiEnabled {
+    if UserDefaults.standard.string(forKey: "savedShortcutCount") == nil {
+        Preferences.set("savedShortcutCount", String(Preferences.shortcutCount), false)
+    }
+    // Ensure Defaults snapshot exists for first-time disable
+    if loadSavedDefaultsSnapshot() == nil {
+        snapshotAllDefaults()
+        saveDefaultsSnapshot()
+        resolveOverridesToPerShortcutKeys()
+    }
+    Preferences.set("shortcutCount", "1", false)
+    selectedIndex = 0
+} else {
+    // Multi mode: reconstruct overrides from saved state
+    if let savedSnapshot = loadSavedDefaultsSnapshot() {
+        var shortcut0Values = [String: Int]()
+        for baseName in indexedSettingBaseNames {
+            shortcut0Values[baseName] = Int(UserDefaults.standard.string(forKey: baseName) ?? "0") ?? 0
+        }
+        for (key, value) in savedSnapshot { Preferences.set(key, String(value), false) }
+        snapshotAllDefaults()
+        reconstructOverrides(savedSnapshot: savedSnapshot, shortcut0PreRestoreValues: shortcut0Values)
+    }
+    selectedIndex = defaultsSelectionIndex
+}
+```
+
+### Step 10: Remove Dead Code from V2
+
+Remove from V2 that's no longer needed:
+- `preActivateDemoOverrides` call in `makeShortcutEditor` — overrides now reconstructed dynamically
 
 ## Verification
 
-1. Build and run the app
-2. Open Settings → Shortcuts tab
-3. Checkbox should appear above the tabbed box, unchecked by default
-4. Check the checkbox → multi-shortcut UI appears (sidebar + editors)
-5. Add a second shortcut, enable a gesture, override some settings
-6. Uncheck → modal appears listing what will be lost
-7. Confirm → extra shortcuts removed, gesture disabled, overrides reset, panel hidden
-8. Uncheck when only Shortcut 1 with all defaults + gesture disabled → no modal, just hides
-9. Check again → UI reappears with clean Shortcut 1
-10. Quit and relaunch → checkbox state persists
+1. Build: `xcodebuild -workspace alt-tab-macos.xcworkspace -scheme Debug -configuration Debug -destination 'platform=macOS,arch=arm64' CODE_SIGN_IDENTITY="-" -derivedDataPath /Users/user/Library/Developer/Xcode/DerivedData/alt-tab-macos-gubybsmxjrlleueerlvdotbafqno build`
+2. Run: `pkill -f "AltTab Fork" 2>/dev/null; sleep 1; open /Users/user/Library/Developer/Xcode/DerivedData/alt-tab-macos-gubybsmxjrlleueerlvdotbafqno/Build/Products/Debug/AltTab\ Fork.app`
+3. Open Settings → Shortcuts tab
+4. **Simple mode (default)**: Sidebar shows "Shortcut" + "Gesture" top-aligned, no gap. Checkbox says "Enable multiple shortcuts".
+5. Click "Gesture" → full editor with trigger dropdown + 8 filtering controls
+6. **Check checkbox** → "Defaults" appears, "Shortcut" becomes "Shortcut 1", gesture moves to bottom, +/- buttons appear
+7. Override some settings on Shortcut 1 and Gesture. Note the values.
+8. **Uncheck checkbox** → instant transition. Shortcut shows resolved values (Defaults values for inherited, override values for overridden). Gesture shows its resolved values.
+9. **Re-check** → overrides reconstructed correctly. Defaults unchanged. Gesture overrides preserved.
+10. Change a filtering setting in simple mode on Shortcut, then re-check → changed value appears as override on Shortcut 1.
+11. Quit and relaunch → mode and all state persist correctly
+
+## KNOWN UNKNOWNS
+
+- KNOWN UNKNOWN: `showFullscreenWindows` dropdown uses a filtered allCases. `indexOfSelectedItem` maps to the filtered list, not the full enum. Need to verify during implementation that the stored preference index aligns correctly — if the dropdown stores the raw enum index (via LabelAndControl) this is fine, but if it stores the dropdown position, filtered dropdowns may need special handling.
