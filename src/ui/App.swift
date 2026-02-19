@@ -392,7 +392,8 @@ extension App: NSApplicationDelegate {
         Logger.initialize()
         Logger.info { "Launching AltTab \(App.version)" }
         #if DEBUG
-        UserDefaults.standard.set(true, forKey: "NSConstraintBasedLayoutVisualizeMutuallyExclusiveConstraints")
+        // Disable the constraint visualizer — it highlights harmless ambiguities in standard AppKit controls
+        UserDefaults.standard.set(false, forKey: "NSConstraintBasedLayoutVisualizeMutuallyExclusiveConstraints")
         #endif
         #if !DEBUG
         PFMoveToApplicationsFolderIfNecessary()
@@ -421,15 +422,20 @@ extension App: NSApplicationDelegate {
         SystemAppearanceEvents.observe()
         SystemScrollerStyleEvents.observe()
         Applications.initialDiscovery()
+        #if DEBUG
+        // UI-only prototype: skip global event taps so the fork doesn't steal shortcuts from production AltTab
+        Logger.info { "DEBUG: skipping keyboard/cursor/trackpad event taps (UI prototype mode)" }
+        #else
         KeyboardEvents.addEventHandlers()
         CursorEvents.observe()
         TrackpadEvents.observe()
+        #endif
         CliEvents.observe()
         PreferencesEvents.initialize()
         BenchmarkRunner.startIfNeeded()
         showSettingsWindowOnFirstLaunchIfNeeded()
         #if DEBUG
-//            self.showSettingsWindow()
+        self.showSettingsWindow()
         #endif
         Logger.info { "Finished launching AltTab" }
     }
