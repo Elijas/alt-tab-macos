@@ -75,16 +75,7 @@ class PreferencesEvents {
     }
 
     private static func applyStartAtLoginPreference() {
-        var preferenceEnabled = Preferences.startAtLogin
-        if (PreferencesEvents.self as AvoidDeprecationWarnings.Type).removeLoginItemIfPresent() && !preferenceEnabled {
-            preferenceEnabled = true
-            Preferences.set("startAtLogin", "true", false)
-        }
-        do {
-            try writePlistToDisk(preferenceEnabled)
-        } catch let error {
-            Logger.error { "Failed to write plist file to disk. error:\(error)" }
-        }
+        // Disabled in fork — login item management causes issues during development
     }
 
     private static func writePlistToDisk(_ enabled: Bool) throws {

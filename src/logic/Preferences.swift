@@ -73,6 +73,7 @@ class Preferences {
         "screenRecordingPermissionSkipped": "false",
         "trackpadHapticFeedbackEnabled": "true",
         "settingsWindowShownOnFirstLaunch": "false",
+        "multipleShortcutsEnabled": "false",
         ]
         (0..<maxShortcutCount).forEach { index in
             values[indexToName("holdShortcut", index)] = "⌥"
