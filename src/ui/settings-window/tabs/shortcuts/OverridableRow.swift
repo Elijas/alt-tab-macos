@@ -150,9 +150,13 @@ class OverrideTracker {
     /// All overridable rows managed by this tracker, for batch reset.
     private var rows = [OverridableRowView]()
 
-    init(footerLabel: NSTextField, resetAllButton: NSButton? = nil) {
+    /// Context label for the footer (e.g. "this shortcut", "this gesture").
+    private let contextName: String
+
+    init(footerLabel: NSTextField, resetAllButton: NSButton? = nil, contextName: String = "this shortcut") {
         self.footerLabel = footerLabel
         self.resetAllButton = resetAllButton
+        self.contextName = contextName
         updateFooter()
     }
 
@@ -187,7 +191,7 @@ class OverrideTracker {
     private func updateFooter() {
         guard let label = footerLabel else { return }
         let hasOverrides = !overriddenSettings.isEmpty
-        resetAllButton?.alphaValue = hasOverrides ? 1.0 : 0.0
+        resetAllButton?.isHidden = !hasOverrides
         resetAllButton?.isEnabled = hasOverrides
         updateSectionTitles()
         if hasOverrides {
@@ -196,7 +200,7 @@ class OverrideTracker {
             label.stringValue = "⚡ \(count) \(noun) overridden"
             label.textColor = .labelColor
         } else {
-            label.stringValue = NSLocalizedString("All settings inherited from Defaults", comment: "")
+            label.stringValue = String(format: NSLocalizedString("All settings for %@ currently inherited from Defaults.", comment: ""), contextName)
             label.textColor = .tertiaryLabelColor
         }
     }

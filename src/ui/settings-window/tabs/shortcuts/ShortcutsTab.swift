@@ -194,7 +194,8 @@ class ShortcutsTab: NSObject {
     private static var simpleModeConstraints = [NSLayoutConstraint]()
 
     private static var simpleModeEditorView: NSView?
-    private static var simpleGestureEditorView: NSView?
+    private static var simpleKeyboardTriggerView: NSView?
+    private static var simpleGestureTriggerView: NSView?
     private static var defaultsEditorView: NSView?
     private static var shortcutEditorViews = [NSView]()
     private static var gestureEditorView: NSView?
@@ -209,7 +210,6 @@ class ShortcutsTab: NSObject {
 
     static func initTab() -> NSView {
         simpleModeEditorView = makeSimpleModeEditor()
-        simpleGestureEditorView = makeSimpleGestureEditor()
         defaultsEditorView = makeDefaultsEditor()
         shortcutEditorViews = (0..<Preferences.maxShortcutCount).map { makeShortcutEditor(index: $0) }
         gestureEditorView = makeGestureEditor()
@@ -332,7 +332,6 @@ class ShortcutsTab: NSObject {
         scrollView.documentView = documentView
         var views: [NSView] = []
         if let simpleModeEditorView { views.append(simpleModeEditorView) }
-        if let simpleGestureEditorView { views.append(simpleGestureEditorView) }
         if let defaultsEditorView { views.append(defaultsEditorView) }
         views.append(contentsOf: shortcutEditorViews)
         if let gestureEditorView { views.append(gestureEditorView) }
@@ -502,7 +501,7 @@ class ShortcutsTab: NSObject {
         return sidebar
     }
 
-    // MARK: - Simple Mode Editor (no overrides, includes trigger)
+    // MARK: - Simple Mode Editor (both triggers + shared settings)
 
     private static func makeSimpleModeEditor() -> NSView {
         let width = shortcutEditorWidth
@@ -512,10 +511,14 @@ class ShortcutsTab: NSObject {
             refreshInheritedControlValues()
         }
 
-        let table = TableGroupView(width: width)
+        let container = NSStackView()
+        container.orientation = .vertical
+        container.alignment = .leading
+        container.spacing = 0
 
-        // TRIGGER section
-        table.addNewTable()
+        // KEYBOARD TRIGGER section (visible when Shortcut is selected)
+        let keyboardTrigger = TableGroupView(width: width)
+        keyboardTrigger.addNewTable()
         let holdName = Preferences.indexToName("holdShortcut", 0)
         let holdValue = UserDefaults.standard.string(forKey: holdName) ?? ""
         var holdShortcut = LabelAndControl.makeLabelWithRecorder(
@@ -527,66 +530,14 @@ class ShortcutsTab: NSObject {
         let nextWindowShortcut = LabelAndControl.makeLabelWithRecorder(
             NSLocalizedString("Select next window", comment: ""), nextName, nextValue,
             labelPosition: .right)
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Trigger", comment: ""),
+        keyboardTrigger.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Trigger", comment: ""),
             rightViews: holdShortcut + [nextWindowShortcut[0]]))
+        simpleKeyboardTriggerView = keyboardTrigger
+        container.addArrangedSubview(keyboardTrigger)
 
-        // APPEARANCE section
-        table.addNewTable()
-        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Appearance", comment: ""), bold: true)], rightViews: nil)
-        table.addRow(secondaryViews: [LabelAndControl.makeImageRadioButtons("appearanceStyle",
-            AppearanceStylePreference.allCases, extraAction: syncInherited, buttonSpacing: 10)], secondaryViewsAlignment: .centerX)
-        table.addRow(leftText: NSLocalizedString("Size", comment: ""),
-            rightViews: [LabelAndControl.makeSegmentedControl("appearanceSize",
-                AppearanceSizePreference.allCases, segmentWidth: 100, extraAction: syncInherited)])
-        table.addRow(leftText: NSLocalizedString("Theme", comment: ""),
-            rightViews: [LabelAndControl.makeSegmentedControl("appearanceTheme",
-                AppearanceThemePreference.allCases, segmentWidth: 100, extraAction: syncInherited)])
-
-        // FILTERING section
-        table.addNewTable()
-        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Filtering", comment: ""), bold: true)], rightViews: nil)
-        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from applications", comment: ""))],
-            rightViews: [LabelAndControl.makeDropdown("appsToShow", AppsToShowPreference.allCases, extraAction: syncInherited)])
-        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from Spaces", comment: ""))],
-            rightViews: [LabelAndControl.makeDropdown("spacesToShow", SpacesToShowPreference.allCases, extraAction: syncInherited)])
-        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from screens", comment: ""))],
-            rightViews: [LabelAndControl.makeDropdown("screensToShow", ScreensToShowPreference.allCases, extraAction: syncInherited)])
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show minimized windows", comment: ""),
-            rightViews: [LabelAndControl.makeDropdown("showMinimizedWindows", ShowHowPreference.allCases, extraAction: syncInherited)]))
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show hidden windows", comment: ""),
-            rightViews: [LabelAndControl.makeDropdown("showHiddenWindows", ShowHowPreference.allCases, extraAction: syncInherited)]))
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show fullscreen windows", comment: ""),
-            rightViews: [LabelAndControl.makeDropdown("showFullscreenWindows",
-                ShowHowPreference.allCases.filter { $0 != .showAtTheEnd }, extraAction: syncInherited)]))
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show apps with no open window", comment: ""),
-            rightViews: [LabelAndControl.makeDropdown("showWindowlessApps", ShowHowPreference.allCases, extraAction: syncInherited)]))
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Order windows by", comment: ""),
-            rightViews: [LabelAndControl.makeDropdown("windowOrder", WindowOrderPreference.allCases, extraAction: syncInherited)]))
-
-        // BEHAVIOR section
-        table.addNewTable()
-        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Behavior", comment: ""), bold: true)], rightViews: nil)
-        table.addRow(leftText: NSLocalizedString("After keys are released", comment: ""),
-            rightViews: [LabelAndControl.makeDropdown("shortcutStyle", ShortcutStylePreference.allCases, extraAction: syncInherited)])
-
-        // MULTIPLE SCREENS section
-        table.addNewTable()
-        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Multiple screens", comment: ""), bold: true)], rightViews: nil)
-        table.addRow(leftText: NSLocalizedString("Show on", comment: ""),
-            rightViews: LabelAndControl.makeDropdown("showOnScreen", ShowOnScreenPreference.allCases, extraAction: syncInherited))
-
-        return table
-    }
-
-    // MARK: - Simple Gesture Editor (trigger + filtering, no overrides)
-
-    private static func makeSimpleGestureEditor() -> NSView {
-        let width = shortcutEditorWidth
-        let gestureIdx = Preferences.gestureIndex
-        let table = TableGroupView(width: width)
-
-        // TRIGGER section
-        table.addNewTable()
+        // GESTURE TRIGGER section (visible when Gesture is selected)
+        let gestureTrigger = TableGroupView(width: width)
+        gestureTrigger.addNewTable()
         let gesture = LabelAndControl.makeDropdown("nextWindowGesture", GesturePreference.allCases)
         let message = NSLocalizedString("You may need to disable some conflicting system gestures", comment: "")
         let button = NSButton(title: NSLocalizedString("Open Trackpad Settings…", comment: ""),
@@ -599,31 +550,62 @@ class ShortcutsTab: NSObject {
         gestureWithTooltip.alignment = .centerY
         gestureWithTooltip.setViews([gesture], in: .trailing)
         gestureWithTooltip.setViews([infoBtn], in: .leading)
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Trigger", comment: ""),
+        gestureTrigger.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Trigger", comment: ""),
             rightViews: [gestureWithTooltip]))
+        gestureTrigger.isHidden = true
+        simpleGestureTriggerView = gestureTrigger
+        container.addArrangedSubview(gestureTrigger)
 
-        // FILTERING section — bound to per-gesture keys (e.g. appsToShow10)
-        table.addNewTable()
-        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Filtering", comment: ""), bold: true)], rightViews: nil)
-        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from applications", comment: ""))],
-            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("appsToShow", gestureIdx), AppsToShowPreference.allCases)])
-        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from Spaces", comment: ""))],
-            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("spacesToShow", gestureIdx), SpacesToShowPreference.allCases)])
-        table.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from screens", comment: ""))],
-            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("screensToShow", gestureIdx), ScreensToShowPreference.allCases)])
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show minimized windows", comment: ""),
-            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("showMinimizedWindows", gestureIdx), ShowHowPreference.allCases)]))
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show hidden windows", comment: ""),
-            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("showHiddenWindows", gestureIdx), ShowHowPreference.allCases)]))
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show fullscreen windows", comment: ""),
-            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("showFullscreenWindows", gestureIdx),
-                ShowHowPreference.allCases.filter { $0 != .showAtTheEnd })]))
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show apps with no open window", comment: ""),
-            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("showWindowlessApps", gestureIdx), ShowHowPreference.allCases)]))
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Order windows by", comment: ""),
-            rightViews: [LabelAndControl.makeDropdown(Preferences.indexToName("windowOrder", gestureIdx), WindowOrderPreference.allCases)]))
+        // SHARED SETTINGS (always visible, same controls for both triggers)
+        let settings = TableGroupView(width: width)
 
-        return table
+        // APPEARANCE section
+        settings.addNewTable()
+        settings.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Appearance", comment: ""), bold: true)], rightViews: nil)
+        settings.addRow(secondaryViews: [LabelAndControl.makeImageRadioButtons("appearanceStyle",
+            AppearanceStylePreference.allCases, extraAction: syncInherited, buttonSpacing: 10)], secondaryViewsAlignment: .centerX)
+        settings.addRow(leftText: NSLocalizedString("Size", comment: ""),
+            rightViews: [LabelAndControl.makeSegmentedControl("appearanceSize",
+                AppearanceSizePreference.allCases, segmentWidth: 100, extraAction: syncInherited)])
+        settings.addRow(leftText: NSLocalizedString("Theme", comment: ""),
+            rightViews: [LabelAndControl.makeSegmentedControl("appearanceTheme",
+                AppearanceThemePreference.allCases, segmentWidth: 100, extraAction: syncInherited)])
+
+        // FILTERING section
+        settings.addNewTable()
+        settings.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Filtering", comment: ""), bold: true)], rightViews: nil)
+        settings.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from applications", comment: ""))],
+            rightViews: [LabelAndControl.makeDropdown("appsToShow", AppsToShowPreference.allCases, extraAction: syncInherited)])
+        settings.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from Spaces", comment: ""))],
+            rightViews: [LabelAndControl.makeDropdown("spacesToShow", SpacesToShowPreference.allCases, extraAction: syncInherited)])
+        settings.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Show windows from screens", comment: ""))],
+            rightViews: [LabelAndControl.makeDropdown("screensToShow", ScreensToShowPreference.allCases, extraAction: syncInherited)])
+        settings.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show minimized windows", comment: ""),
+            rightViews: [LabelAndControl.makeDropdown("showMinimizedWindows", ShowHowPreference.allCases, extraAction: syncInherited)]))
+        settings.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show hidden windows", comment: ""),
+            rightViews: [LabelAndControl.makeDropdown("showHiddenWindows", ShowHowPreference.allCases, extraAction: syncInherited)]))
+        settings.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show fullscreen windows", comment: ""),
+            rightViews: [LabelAndControl.makeDropdown("showFullscreenWindows",
+                ShowHowPreference.allCases.filter { $0 != .showAtTheEnd }, extraAction: syncInherited)]))
+        settings.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Show apps with no open window", comment: ""),
+            rightViews: [LabelAndControl.makeDropdown("showWindowlessApps", ShowHowPreference.allCases, extraAction: syncInherited)]))
+        settings.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Order windows by", comment: ""),
+            rightViews: [LabelAndControl.makeDropdown("windowOrder", WindowOrderPreference.allCases, extraAction: syncInherited)]))
+
+        // BEHAVIOR section
+        settings.addNewTable()
+        settings.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Behavior", comment: ""), bold: true)], rightViews: nil)
+        settings.addRow(leftText: NSLocalizedString("After keys are released", comment: ""),
+            rightViews: [LabelAndControl.makeDropdown("shortcutStyle", ShortcutStylePreference.allCases, extraAction: syncInherited)])
+
+        // MULTIPLE SCREENS section
+        settings.addNewTable()
+        settings.addRow(leftViews: [TableGroupView.makeText(NSLocalizedString("Multiple screens", comment: ""), bold: true)], rightViews: nil)
+        settings.addRow(leftText: NSLocalizedString("Show on", comment: ""),
+            rightViews: LabelAndControl.makeDropdown("showOnScreen", ShowOnScreenPreference.allCases, extraAction: syncInherited))
+
+        container.addArrangedSubview(settings)
+        return container
     }
 
     // MARK: - Defaults Editor (no overrides)
@@ -712,26 +694,13 @@ class ShortcutsTab: NSObject {
         let footerLabel = NSTextField(labelWithString: "")
         footerLabel.font = NSFont.systemFont(ofSize: 11)
         footerLabel.textColor = .secondaryLabelColor
+        footerLabel.lineBreakMode = .byWordWrapping
         footerLabel.translatesAutoresizingMaskIntoConstraints = false
         let resetAllButton = makeResetAllButton()
         let tracker = OverrideTracker(footerLabel: footerLabel, resetAllButton: resetAllButton)
         resetAllButton.onAction = { [weak tracker] _ in tracker?.resetAll() }
 
         let table = TableGroupView(width: width)
-
-        // Inheritance hint
-        let hint = NSTextField(labelWithString: NSLocalizedString(
-            "Greyed-out settings are inherited from Defaults. Click any to customize it for this shortcut, or ↺ to reset.", comment: ""))
-        hint.font = NSFont.systemFont(ofSize: 11)
-        hint.textColor = .tertiaryLabelColor
-        hint.lineBreakMode = .byWordWrapping
-        hint.preferredMaxLayoutWidth = width - 20
-        hint.translatesAutoresizingMaskIntoConstraints = false
-        let hintWrapper = NSStackView(views: [hint])
-        hintWrapper.orientation = .vertical
-        hintWrapper.alignment = .leading
-        hintWrapper.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 2, right: 0)
-        table.addRow(leftViews: [hintWrapper], rightViews: nil)
 
         // TRIGGER section (not overridable — always per-shortcut)
         table.addNewTable()
@@ -748,6 +717,21 @@ class ShortcutsTab: NSObject {
             labelPosition: .right)
         table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Trigger", comment: ""),
             rightViews: holdShortcut + [nextWindowShortcut[0]]))
+
+        // Inheritance hint + Reset All (between trigger and overridable sections)
+        let hint = NSTextField(labelWithString: NSLocalizedString(
+            "Greyed-out settings are inherited from Defaults. Click any to customize it for this shortcut, or ↺ to reset.", comment: ""))
+        hint.font = NSFont.systemFont(ofSize: 11)
+        hint.textColor = .tertiaryLabelColor
+        hint.lineBreakMode = .byWordWrapping
+        hint.preferredMaxLayoutWidth = width - 20
+        hint.translatesAutoresizingMaskIntoConstraints = false
+        let hintWrapper = NSStackView(views: [hint])
+        hintWrapper.orientation = .vertical
+        hintWrapper.alignment = .leading
+        hintWrapper.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 2, right: 0)
+        table.addRow(leftViews: [hintWrapper], rightViews: nil)
+        table.addRow(leftViews: [footerLabel], rightViews: [resetAllButton])
 
         // APPEARANCE section (overridable)
         table.addNewTable()
@@ -821,10 +805,6 @@ class ShortcutsTab: NSObject {
             label: NSLocalizedString("Show on", comment: ""),
             preferences: ShowOnScreenPreference.allCases, section: "Multiple screens")
 
-        // Footer
-        table.addNewTable()
-        table.addRow(leftViews: [footerLabel], rightViews: [resetAllButton])
-
         return table
     }
 
@@ -837,9 +817,10 @@ class ShortcutsTab: NSObject {
         let footerLabel = NSTextField(labelWithString: "")
         footerLabel.font = NSFont.systemFont(ofSize: 11)
         footerLabel.textColor = .secondaryLabelColor
+        footerLabel.lineBreakMode = .byWordWrapping
         footerLabel.translatesAutoresizingMaskIntoConstraints = false
         let gestureResetAllButton = makeResetAllButton()
-        let tracker = OverrideTracker(footerLabel: footerLabel, resetAllButton: gestureResetAllButton)
+        let tracker = OverrideTracker(footerLabel: footerLabel, resetAllButton: gestureResetAllButton, contextName: "this gesture")
         gestureResetAllButton.onAction = { [weak tracker] _ in tracker?.resetAll() }
 
         let table = TableGroupView(width: width)
@@ -857,7 +838,12 @@ class ShortcutsTab: NSObject {
         gestureWithTooltip.alignment = .centerY
         gestureWithTooltip.setViews([gesture], in: .trailing)
         gestureWithTooltip.setViews([infoBtn], in: .leading)
-        // Inheritance hint
+        // TRIGGER section (gesture-specific, not overridable)
+        table.addNewTable()
+        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Trigger", comment: ""),
+            rightViews: [gestureWithTooltip]))
+
+        // Inheritance hint + Reset All (between trigger and overridable sections)
         let gestureHint = NSTextField(labelWithString: NSLocalizedString(
             "Greyed-out settings are inherited from Defaults. Click any to customize it for this gesture, or ↺ to reset.", comment: ""))
         gestureHint.font = NSFont.systemFont(ofSize: 11)
@@ -870,11 +856,21 @@ class ShortcutsTab: NSObject {
         gestureHintWrapper.alignment = .leading
         gestureHintWrapper.edgeInsets = NSEdgeInsets(top: 4, left: 0, bottom: 2, right: 0)
         table.addRow(leftViews: [gestureHintWrapper], rightViews: nil)
+        table.addRow(leftViews: [footerLabel], rightViews: [gestureResetAllButton])
 
-        // TRIGGER section (gesture-specific, not overridable)
+        // APPEARANCE section (overridable)
         table.addNewTable()
-        table.addRow(TableGroupView.Row(leftTitle: NSLocalizedString("Trigger", comment: ""),
-            rightViews: [gestureWithTooltip]))
+        let gestureAppearanceTitle = TableGroupView.makeText(NSLocalizedString("Appearance", comment: ""), bold: true)
+        tracker.registerSectionTitle(gestureAppearanceTitle, section: "Appearance")
+        table.addRow(leftViews: [gestureAppearanceTitle], rightViews: nil)
+        addOverridableImageRadioRow(table, tracker: tracker, settingName: "appearanceStyle",
+            preferences: AppearanceStylePreference.allCases, section: "Appearance", index: index)
+        addOverridableSegmentRow(table, tracker: tracker, settingName: "appearanceSize",
+            label: NSLocalizedString("Size", comment: ""),
+            preferences: AppearanceSizePreference.allCases, segmentWidth: 100, section: "Appearance", index: index)
+        addOverridableSegmentRow(table, tracker: tracker, settingName: "appearanceTheme",
+            label: NSLocalizedString("Theme", comment: ""),
+            preferences: AppearanceThemePreference.allCases, segmentWidth: 100, section: "Appearance", index: index)
 
         // FILTERING section (overridable)
         table.addNewTable()
@@ -914,10 +910,6 @@ class ShortcutsTab: NSObject {
             label: NSLocalizedString("Order windows by", comment: ""),
             preferences: WindowOrderPreference.allCases, section: "Filtering")
 
-        // Footer
-        table.addNewTable()
-        table.addRow(leftViews: [footerLabel], rightViews: [gestureResetAllButton])
-
         return table
     }
 
@@ -927,10 +919,10 @@ class ShortcutsTab: NSObject {
         let button: NSButton
         if #available(macOS 11.0, *),
            let image = NSImage(systemSymbolName: "arrow.counterclockwise", accessibilityDescription: "Reset All") {
-            button = NSButton(title: NSLocalizedString("Reset All", comment: ""), image: image, target: nil, action: nil)
+            button = NSButton(title: NSLocalizedString(" Reset All", comment: ""), image: image, target: nil, action: nil)
             button.imagePosition = .imageTrailing
         } else {
-            button = NSButton(title: NSLocalizedString("Reset All ↺", comment: ""), target: nil, action: nil)
+            button = NSButton(title: NSLocalizedString(" Reset All ↺", comment: ""), target: nil, action: nil)
         }
         button.bezelStyle = .inline
         button.font = NSFont.systemFont(ofSize: 11)
@@ -1143,23 +1135,22 @@ class ShortcutsTab: NSObject {
 
         // Hide ALL editors first
         simpleModeEditorView?.isHidden = true
-        simpleGestureEditorView?.isHidden = true
         defaultsEditorView?.isHidden = true
         shortcutEditorViews.forEach { $0.isHidden = true }
         gestureEditorView?.isHidden = true
 
         if isSimpleMode {
-            // Simple mode: direct editors
-            if selectedIndex == gestureSelectionIndex {
-                simpleGestureEditorView?.isHidden = false
-            } else {
-                // Default to Shortcut 1 for any non-gesture selection
+            // Simple mode: one editor, swap trigger sections
+            simpleModeEditorView?.isHidden = false
+            if selectedIndex != gestureSelectionIndex {
                 selectedIndex = 0
-                simpleModeEditorView?.isHidden = false
             }
+            let isGesture = selectedIndex == gestureSelectionIndex
+            simpleKeyboardTriggerView?.isHidden = isGesture
+            simpleGestureTriggerView?.isHidden = !isGesture
             // Sidebar selection highlights
             shortcutRows.enumerated().forEach { $1.setSelected($0 == selectedIndex) }
-            simpleGestureSidebarRow?.setSelected(selectedIndex == gestureSelectionIndex)
+            simpleGestureSidebarRow?.setSelected(isGesture)
         } else {
             // Multi mode: override editors (existing logic)
             defaultsSidebarRow?.setSelected(selectedIndex == defaultsSelectionIndex)
