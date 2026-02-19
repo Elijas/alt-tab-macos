@@ -401,7 +401,13 @@ extension App: NSApplicationDelegate {
         AXUIElement.setGlobalTimeout()
         Preferences.initialize()
         BackgroundWork.preStart()
+        #if DEBUG
+        // UI prototype: skip permission checks entirely
+        SystemPermissions.preStartupPermissionsPassed = true
+        continueAppLaunchAfterPermissionsAreGranted()
+        #else
         SystemPermissions.ensurePermissionsAreGranted()
+        #endif
     }
 
     func continueAppLaunchAfterPermissionsAreGranted() {
