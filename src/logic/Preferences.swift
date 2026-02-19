@@ -74,6 +74,8 @@ class Preferences {
         "trackpadHapticFeedbackEnabled": "true",
         "settingsWindowShownOnFirstLaunch": "false",
         "multipleShortcutsEnabled": "false",
+        "savedShortcutCount": "2",
+        "savedDefaultsSnapshot": "",
         ]
         (0..<maxShortcutCount).forEach { index in
             values[indexToName("holdShortcut", index)] = "⌥"
