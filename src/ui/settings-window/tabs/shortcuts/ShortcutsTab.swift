@@ -806,7 +806,7 @@ class ShortcutsTab: NSObject {
         let control = LabelAndControl.makeImageRadioButtons(inheritedKey, preferences, extraAction: { _ in
             overridableRef?.activateOverride()
         }, buttonSpacing: 10)
-        let overridable = OverridableRowView(settingName: settingName, control: control, layout: .vertical)
+        let overridable = OverridableRowView(settingName: settingName, control: control, layout: .horizontal)
         overridableRef = overridable
         overridable.refreshControl = { [weak control] in
             guard let control else { return }
