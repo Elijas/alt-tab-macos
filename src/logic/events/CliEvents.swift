@@ -1,5 +1,5 @@
 class CliEvents {
-    static let portName = "com.lwouis.alt-tab-macos.cli"
+    static let portName = "com.lwouis.alt-tab-macos.cli.dev"
 
     static func observe() {
         var context = CFMessagePortContext(version: 0, info: nil, retain: nil, release: nil, copyDescription: nil)
