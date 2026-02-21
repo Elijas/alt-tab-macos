@@ -696,6 +696,7 @@ class SettingsWindow: NSWindow {
             SettingsSectionDefinition(id: "general", title: NSLocalizedString("General", comment: ""), imageName: "general", systemSymbolName: "gearshape", view: GeneralTab.initTab()),
             SettingsSectionDefinition(id: "policies", title: NSLocalizedString("Policies", comment: ""), imageName: "policies", systemSymbolName: "antenna.radiowaves.left.and.right", view: PoliciesTab.initTab()),
             SettingsSectionDefinition(id: "blacklists", title: NSLocalizedString("Blacklists", comment: ""), imageName: "blacklists", systemSymbolName: "hand.raised", view: BlacklistsTab.initTab()),
+            SettingsSectionDefinition(id: "panel", title: NSLocalizedString("Panel", comment: ""), imageName: "general", systemSymbolName: "sidebar.right", view: PanelTab.initTab()),
         ]
     }
 

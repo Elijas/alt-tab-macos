@@ -75,7 +75,9 @@ class AccessibilityEvents {
 
     static func handleEventWindow(_ type: String, _ wid: CGWindowID, _ pid: pid_t, _ element: AXUIElement) throws {
         guard wid != 0 || type == kAXUIElementDestroyedNotification,
-              wid != App.app.tilesPanel.windowNumber else { return } // don't process events for the thumbnails panel
+              wid != App.app.tilesPanel.windowNumber,
+              !SidePanelManager.shared.allWindowNumbers().contains(Int(wid))
+              else { return } // don't process events for our own panels
         let level = wid.level()
         let a = try element.attributes([kAXTitleAttribute, kAXSubroleAttribute, kAXRoleAttribute, kAXSizeAttribute, kAXPositionAttribute, kAXFullscreenAttribute, kAXMinimizedAttribute])
         DispatchQueue.main.async {
