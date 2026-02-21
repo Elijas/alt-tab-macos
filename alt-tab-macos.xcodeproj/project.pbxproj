@@ -307,6 +307,10 @@
 		F00DCAFE0000000000001002 /* Search.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00DCAFE0000000000000002 /* Search.swift */; };
 		F00DCAFE0000000000001003 /* SearchTestable.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00DCAFE0000000000000003 /* SearchTestable.swift */; };
 		F00DCAFE0000000000001103 /* SearchTestable.swift in Sources */ = {isa = PBXBuildFile; fileRef = F00DCAFE0000000000000003 /* SearchTestable.swift */; };
+		AA00F1B2C3D4E5F600000004 /* SidePanelRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00F1B2C3D4E5F600000001 /* SidePanelRow.swift */; };
+		AA00F1B2C3D4E5F600000005 /* SidePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00F1B2C3D4E5F600000002 /* SidePanel.swift */; };
+		AA00F1B2C3D4E5F600000006 /* SidePanelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00F1B2C3D4E5F600000003 /* SidePanelManager.swift */; };
+		AA00F1B2C3D4E5F600000008 /* PanelTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00F1B2C3D4E5F600000009 /* PanelTab.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -751,6 +755,10 @@
 		E20104DD2C3DE10E7CCC5B5A /* Pods-unit-tests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-unit-tests.release.xcconfig"; path = "Target Support Files/Pods-unit-tests/Pods-unit-tests.release.xcconfig"; sourceTree = "<group>"; };
 		F00DCAFE0000000000000002 /* Search.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Search.swift; sourceTree = "<group>"; };
 		F00DCAFE0000000000000003 /* SearchTestable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchTestable.swift; sourceTree = "<group>"; };
+		AA00F1B2C3D4E5F600000001 /* SidePanelRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanelRow.swift; sourceTree = "<group>"; };
+		AA00F1B2C3D4E5F600000002 /* SidePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanel.swift; sourceTree = "<group>"; };
+		AA00F1B2C3D4E5F600000003 /* SidePanelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanelManager.swift; sourceTree = "<group>"; };
+		AA00F1B2C3D4E5F600000009 /* PanelTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelTab.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1483,6 +1491,7 @@
 			children = (
 				D04BAAB92261FC04854FDDE9 /* App.swift */,
 				D04BA62E30174C336E4080FA /* main-window */,
+				AA00F1B2C3D4E5F600000007 /* side-panel */,
 				D04BABCD12CA72B06290C248 /* settings-window */,
 				D04BAD905546AA93E5117B0A /* Menubar.swift */,
 				D04BA26C75F76C277653C932 /* FeedbackWindow.swift */,
@@ -1570,6 +1579,7 @@
 				D04BAD60C97E609A759E721E /* PoliciesTab.swift */,
 				D04BA788228BA86D9EFBD1ED /* AcknowledgmentsTab.swift */,
 				D04BA27695D9A5824720BD7B /* BlacklistsTab.swift */,
+				AA00F1B2C3D4E5F600000009 /* PanelTab.swift */,
 			);
 			path = tabs;
 			sourceTree = "<group>";
@@ -1690,6 +1700,16 @@
 				D04BAFC2A1B2C3D4E5F60003 /* TileUnderLayer.swift */,
 			);
 			path = "main-window";
+			sourceTree = "<group>";
+		};
+		AA00F1B2C3D4E5F600000007 /* side-panel */ = {
+			isa = PBXGroup;
+			children = (
+				AA00F1B2C3D4E5F600000001 /* SidePanelRow.swift */,
+				AA00F1B2C3D4E5F600000002 /* SidePanel.swift */,
+				AA00F1B2C3D4E5F600000003 /* SidePanelManager.swift */,
+			);
+			path = "side-panel";
 			sourceTree = "<group>";
 		};
 		D04BA6979DFAC087823F7683 /* id.lproj */ = {
@@ -2519,6 +2539,10 @@
 				D04BA3CF766857381519B892 /* BackgroundWork.swift in Sources */,
 				D04BA48B00B4211A465C7337 /* DebugProfile.swift in Sources */,
 				D04BAB68B7B8D1B548BC3AD5 /* App.swift in Sources */,
+				AA00F1B2C3D4E5F600000004 /* SidePanelRow.swift in Sources */,
+				AA00F1B2C3D4E5F600000005 /* SidePanel.swift in Sources */,
+				AA00F1B2C3D4E5F600000006 /* SidePanelManager.swift in Sources */,
+				AA00F1B2C3D4E5F600000008 /* PanelTab.swift in Sources */,
 				D04BAB048DE698E013577C51 /* TilesPanel.swift in Sources */,
 				D04BA69D47B5E60A6AD9CBD9 /* TileTitleView.swift in Sources */,
 				D04BA1B133D53572D7B312C2 /* TileFontIconView.swift in Sources */,
