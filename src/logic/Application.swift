@@ -181,7 +181,9 @@ class Application: NSObject {
     }
 
     func manuallyUpdateWindow(_ axWindow: AXUIElement, _ wid: CGWindowID) throws {
-        guard wid != 0 && wid != App.app.tilesPanel.windowNumber else { return } // some bogus "windows" have wid 0
+        guard wid != 0 && wid != App.app.tilesPanel.windowNumber
+              && !SidePanelManager.shared.allWindowNumbers().contains(Int(wid))
+              else { return } // some bogus "windows" have wid 0; also filter our own panels
         let level = wid.level()
         let a = try axWindow.attributes([kAXTitleAttribute, kAXSubroleAttribute, kAXRoleAttribute, kAXSizeAttribute, kAXPositionAttribute, kAXFullscreenAttribute, kAXMinimizedAttribute])
         DispatchQueue.main.async { [weak self] in
