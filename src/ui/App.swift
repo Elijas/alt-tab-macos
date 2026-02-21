@@ -51,6 +51,7 @@ class App: AppCenterApplication {
     /// we put application code here which should be executed on init() and Preferences change
     func resetPreferencesDependentComponents() {
         tilesPanel.tilesView.reset()
+        SidePanelManager.shared.rebuildPanelsForScreenChange()
     }
 
     func restart() {
@@ -285,6 +286,7 @@ class App: AppCenterApplication {
     }
 
     func refreshOpenUiAfterExternalEvent(_ windowsToScreenshot: [Window], windowRemoved: Bool = false) {
+        SidePanelManager.shared.refreshPanels()
         Windows.refreshThumbnailsAsync(windowsToScreenshot, .refreshUiAfterExternalEvent, windowRemoved: windowRemoved)
         refreshOpenUiWithThrottling {
             guard self.appIsBeingUsed else { return }
@@ -422,6 +424,7 @@ extension App: NSApplicationDelegate {
         Screens.refresh()
         SpacesEvents.observe()
         ScreensEvents.observe()
+        SidePanelManager.shared.setup()
         SystemAppearanceEvents.observe()
         SystemScrollerStyleEvents.observe()
         Applications.initialDiscovery()
