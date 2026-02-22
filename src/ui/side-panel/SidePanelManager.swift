@@ -114,7 +114,7 @@ class SidePanelManager {
                         }
                     }
                 }
-                let sorted = group.sorted { $0.creationOrder < $1.creationOrder }
+                let sorted = group.sorted { $0.creationOrder > $1.creationOrder }
                 for w in sorted { seen.insert(w.cgWindowId!) }
                 groups.append(sorted)
             }
