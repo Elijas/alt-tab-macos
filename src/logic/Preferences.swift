@@ -58,7 +58,7 @@ class Preferences {
         "previewFadeInAnimation": "true",
         "hideSpaceNumberLabels": "false",
         "hideStatusIcons": "false",
-        "startAtLogin": "true",
+        "startAtLogin": "false",
         "menubarIcon": MenubarIconPreference.outlined.indexAsString,
         "menubarIconShown": "true",
         "language": LanguagePreference.systemDefault.indexAsString,
@@ -73,6 +73,7 @@ class Preferences {
         "screenRecordingPermissionSkipped": "false",
         "trackpadHapticFeedbackEnabled": "true",
         "settingsWindowShownOnFirstLaunch": "false",
+        "sidePanelEnabled": "true",
         ]
         (0..<maxShortcutCount).forEach { index in
             values[indexToName("holdShortcut", index)] = "⌥"
@@ -130,6 +131,7 @@ class Preferences {
     static var previewSelectedWindow: Bool { CachedUserDefaults.bool("previewFocusedWindow") }
     static var screenRecordingPermissionSkipped: Bool { CachedUserDefaults.bool("screenRecordingPermissionSkipped") }
     static var settingsWindowShownOnFirstLaunch: Bool { CachedUserDefaults.bool("settingsWindowShownOnFirstLaunch") }
+    static var sidePanelEnabled: Bool { CachedUserDefaults.bool("sidePanelEnabled") }
 
     // macro values
     static var appearanceStyle: AppearanceStylePreference { CachedUserDefaults.macroPref("appearanceStyle", AppearanceStylePreference.allCases) }

@@ -29,8 +29,7 @@ class KeyboardEvents {
     }
 
     static func addGlobalShortcut(_ controlId: String, _ shortcut: Shortcut) {
-        addGlobalHandlerIfNeeded(shortcut)
-        registerHotKeyIfNeeded(controlId, shortcut)
+        // disabled: no system-wide hotkey binding in this UI experimentation build
     }
 
     static func removeGlobalShortcut(_ controlId: String, _ shortcut: Shortcut) {
@@ -53,7 +52,7 @@ class KeyboardEvents {
 
     static func addEventHandlers() {
         addLocalMonitorForKeyDownAndKeyUp()
-        addCgEventTapForModifierFlags()
+        // disabled: no CGEvent tap for modifier-only shortcuts in this UI experimentation build
     }
 
     private static func unregisterHotKeyIfNeeded(_ controlId: String, _ shortcut: Shortcut) {
