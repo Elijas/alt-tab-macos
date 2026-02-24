@@ -64,6 +64,7 @@ class SidePanelRow: NSView {
     }
 
     func update(_ window: Window, highlightState: HighlightState, isIndented: Bool = false) {
+        isHovered = false
         iconLayer.isHidden = false
         if let icon = window.icon {
             iconLayer.contents = icon
@@ -83,6 +84,7 @@ class SidePanelRow: NSView {
     }
 
     func showEmpty(highlightState: HighlightState = .none) {
+        isHovered = false
         iconLayer.isHidden = true
         iconLayer.contents = nil
         titleLabel.stringValue = "(empty)"
@@ -128,7 +130,7 @@ class SidePanelRow: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let trackingArea { removeTrackingArea(trackingArea) }
-        trackingArea = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: self)
+        trackingArea = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
         addTrackingArea(trackingArea!)
     }
 

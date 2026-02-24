@@ -133,6 +133,38 @@ class Windows {
         return result
     }
 
+    /// Match tabbed windows to their parent visible window.
+    /// Returns [childWid: parentWid] mapping.
+    /// Currently uses PID heuristic — replace this function body with AX-based
+    /// matching when available (same signature, different implementation).
+    /// KNOWN UNKNOWN: PID matching cannot distinguish multiple tab groups from the
+    /// same app on the same space. Tabs are assigned to the most recently focused
+    /// visible window of that app, which may be wrong for multi-tab-group cases.
+    static func matchTabsToParents(
+        visibleWindows: [(wid: CGWindowID, window: Window)],
+        tabbedWindows: [(wid: CGWindowID, window: Window)]
+    ) -> [CGWindowID: CGWindowID] {
+        var result = [CGWindowID: CGWindowID]()
+        // PID → best visible parent (lowest lastFocusOrder = most recently focused)
+        var bestParentByPid = [pid_t: (wid: CGWindowID, focusOrder: Int)]()
+        for (wid, window) in visibleWindows {
+            let pid = window.application.pid
+            if let existing = bestParentByPid[pid] {
+                if window.lastFocusOrder < existing.focusOrder {
+                    bestParentByPid[pid] = (wid, window.lastFocusOrder)
+                }
+            } else {
+                bestParentByPid[pid] = (wid, window.lastFocusOrder)
+            }
+        }
+        for (childWid, child) in tabbedWindows {
+            if let parent = bestParentByPid[child.application.pid] {
+                result[childWid] = parent.wid
+            }
+        }
+        return result
+    }
+
     static func updatesBeforeShowing() -> Bool {
         if list.count == 0 || MissionControl.state() == .showAllWindows || MissionControl.state() == .showFrontWindows { return false }
         // TODO: find a way to update space info when spaces are changed, instead of on every trigger
