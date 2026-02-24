@@ -97,6 +97,12 @@ class SidePanelRow: NSView {
         onMiddleClick = nil
     }
 
+    func setWrapping(_ wrapping: Bool) {
+        titleLabel.lineBreakMode = wrapping ? .byWordWrapping : .byTruncatingTail
+        titleLabel.maximumNumberOfLines = wrapping ? 2 : 1
+        titleLabel.cell?.wraps = wrapping
+    }
+
     private func applyIndent() {
         let offset = isIndented ? Self.indentOffset : 0
         iconLayer.frame.origin.x = 8 + offset
