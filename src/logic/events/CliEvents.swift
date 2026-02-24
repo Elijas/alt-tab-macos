@@ -53,8 +53,19 @@ class CliServer {
         if rawValue == "--detailed-list" {
             // refresh space/screen assignments so CLI returns fresh data
             Spaces.refresh()
+            let spaceIdsAndIndexes = Spaces.idsAndIndexes.map { $0.0 }
+            let cgsWindowIds = Spaces.windowsInSpaces(spaceIdsAndIndexes)
+            let visibleCgsWindowIds = Spaces.windowsInSpaces(spaceIdsAndIndexes, false)
             for window in Windows.list {
                 window.updateSpacesAndScreen()
+                Windows.detectTabbedWindows(window, cgsWindowIds, visibleCgsWindowIds)
+            }
+            // infer tab parent relationships from isTabbed state
+            let parentMap = Windows.inferTabParentIds(Windows.list)
+            for window in Windows.list {
+                if let wid = window.cgWindowId {
+                    window.parentWindowId = parentMap[wid] ?? 0
+                }
             }
             let windows = Windows.list
                 .filter { !$0.isWindowlessApp }
@@ -68,6 +79,7 @@ class CliServer {
                         lastFocusOrder: $0.lastFocusOrder,
                         creationOrder: $0.creationOrder,
                         isTabbed: $0.isTabbed,
+                        parentWindowId: $0.parentWindowId == 0 ? nil : $0.parentWindowId,
                         isHidden: $0.isHidden,
                         isFullscreen: $0.isFullscreen,
                         isMinimized: $0.isMinimized,
@@ -184,6 +196,7 @@ class CliServer {
         var lastFocusOrder: Int
         var creationOrder: Int
         var isTabbed: Bool
+        var parentWindowId: CGWindowID?
         var isHidden: Bool
         var isFullscreen: Bool
         var isMinimized: Bool

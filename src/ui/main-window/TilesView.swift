@@ -486,6 +486,11 @@ class TilesView: NSObject {
                     currentX = projectedX
                     maxX = max(isLeftToRight ? currentX : widthMax - currentX, maxX)
                 }
+                // indent tab children when hierarchy display is enabled
+                if Preferences.showTabHierarchyInMainPanel && window.isTabChild {
+                    let indent: CGFloat = 20
+                    view.frame.origin.x += isLeftToRight ? indent : -indent
+                }
                 rows[rows.count - 1].append(view)
                 newViews.append(view)
                 rowSignature.append(index)

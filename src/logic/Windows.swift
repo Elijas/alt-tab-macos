@@ -90,7 +90,7 @@ class Windows {
 
     /// tabs detection is a flaky work-around the lack of public API to observe OS tabs
     /// see: https://github.com/lwouis/alt-tab-macos/issues/1540
-    private static func detectTabbedWindows(_ window: Window, _ cgsWindowIds: [CGWindowID], _ visibleCgsWindowIds: [CGWindowID]) {
+    static func detectTabbedWindows(_ window: Window, _ cgsWindowIds: [CGWindowID], _ visibleCgsWindowIds: [CGWindowID]) {
         if let cgWindowId = window.cgWindowId {
             if window.isMinimized || window.isHidden {
                 if #available(macOS 13.0, *) {
@@ -104,6 +104,33 @@ class Windows {
                 window.isTabbed = !visibleCgsWindowIds.contains(cgWindowId)
             }
         }
+    }
+
+    /// Infers tab parent-child relationships from the isTabbed flag.
+    /// Groups windows by PID: tabbed (invisible) windows are children of
+    /// the non-tabbed (visible) window with the lowest lastFocusOrder in the same app.
+    static func inferTabParentIds(_ windows: [Window]) -> [CGWindowID: CGWindowID] {
+        var result = [CGWindowID: CGWindowID]()
+        // group windows by PID
+        var byPid = [pid_t: [Window]]()
+        for window in windows {
+            guard let _ = window.cgWindowId else { continue }
+            byPid[window.application.pid, default: []].append(window)
+        }
+        for (_, appWindows) in byPid {
+            let visible = appWindows.filter { !$0.isTabbed && !$0.isWindowlessApp }
+            let tabbed = appWindows.filter { $0.isTabbed }
+            guard !tabbed.isEmpty else { continue }
+            // the visible window with lowest lastFocusOrder is the "parent"
+            guard let parent = visible.min(by: { $0.lastFocusOrder < $1.lastFocusOrder }),
+                  let parentWid = parent.cgWindowId else { continue }
+            for child in tabbed {
+                if let childWid = child.cgWindowId {
+                    result[childWid] = parentWid
+                }
+            }
+        }
+        return result
     }
 
     static func updatesBeforeShowing() -> Bool {
@@ -120,8 +147,18 @@ class Windows {
             window.updateSpacesAndScreen()
             refreshIfWindowShouldBeShownToTheUser(window)
         }
+        // infer tab parent relationships for hierarchy display
+        let parentMap = inferTabParentIds(list)
+        for window in list {
+            if let wid = window.cgWindowId {
+                window.parentWindowId = parentMap[wid] ?? 0
+            }
+        }
         refreshWhichWindowsToShowTheUser()
         sort()
+        if Preferences.showTabHierarchyInMainPanel {
+            reorderListForTabHierarchy()
+        }
         if (!list.contains { $0.shouldShowTheUser }) { return false }
         return true
     }
@@ -196,7 +233,7 @@ class Windows {
                 !(Preferences.spacesToShow[App.app.shortcutIndex] == .visible && !Spaces.visibleSpaces.contains { visibleSpace in window.spaceIds.contains { $0 == visibleSpace } }) &&
                 !(Preferences.spacesToShow[App.app.shortcutIndex] == .nonVisible && Spaces.visibleSpaces.contains { visibleSpace in window.spaceIds.contains { $0 == visibleSpace } }) &&
                 !(Preferences.screensToShow[App.app.shortcutIndex] == .showingAltTab && !window.isOnScreen(NSScreen.preferred)) &&
-                (Preferences.showTabsAsWindows || !window.isTabbed))
+                (Preferences.showTabsAsWindows || Preferences.showTabHierarchyInMainPanel || !window.isTabbed))
     }
 
     /// Selects the most appropriate main window from a given list of windows.
@@ -468,6 +505,40 @@ class Windows {
             }
             return order == .orderedAscending
         }
+    }
+
+    /// Reorders `list` so that tab children immediately follow their parent window.
+    private static func reorderListForTabHierarchy() {
+        list = orderWithTabHierarchy(list)
+    }
+
+    /// Returns windows reordered so tab children immediately follow their parent.
+    /// Preserves original ordering for root windows and among siblings.
+    static func orderWithTabHierarchy(_ windows: [Window]) -> [Window] {
+        // build parent → children map
+        var childrenByParent = [CGWindowID: [Window]]()
+        var rootWindows = [Window]()
+        for window in windows {
+            if window.isTabChild {
+                childrenByParent[window.parentWindowId, default: []].append(window)
+            } else {
+                rootWindows.append(window)
+            }
+        }
+        // interleave: each root followed by its children
+        var result = [Window]()
+        result.reserveCapacity(windows.count)
+        for window in rootWindows {
+            result.append(window)
+            if let wid = window.cgWindowId, let children = childrenByParent.removeValue(forKey: wid) {
+                result.append(contentsOf: children)
+            }
+        }
+        // orphans: children whose parent isn't in the list (parent closed or filtered out)
+        for (_, orphans) in childrenByParent {
+            result.append(contentsOf: orphans)
+        }
+        return result
     }
 
     static func getLastFocusedOrderWindowIndex() -> Int? {

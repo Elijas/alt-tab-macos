@@ -34,6 +34,11 @@ class PanelTab {
         sideTable.addRow(leftText: "Space separator", rightViews: [sideSepSlider[1], sideSepSlider[2]])
         sideTable.addRow(leftText: "Font size", rightViews: [sideFontSlider[1], sideFontSlider[2]])
 
+        let tabHierarchySwitch = LabelAndControl.makeSwitch("showTabHierarchyInSidePanel", extraAction: { _ in
+            SidePanelManager.shared.refreshPanels()
+        })
+        sideTable.addRow(leftText: "Show tabs as indented items", rightViews: [tabHierarchySwitch])
+
         // "Window Panel" group
         let openButton = NSButton(title: "Open", target: nil, action: nil)
         openButton.bezelStyle = .rounded

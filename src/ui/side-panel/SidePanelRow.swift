@@ -18,13 +18,17 @@ class SidePanelRow: NSView {
         }
     }
 
+    private static let indentOffset: CGFloat = 20
+
     private let iconLayer = LightImageLayer()
     private let titleLabel = NSTextField(labelWithString: "")
+    private var titleLeadingConstraint: NSLayoutConstraint!
     private var onClick: (() -> Void)?
     private var onMiddleClick: (() -> Void)?
     private var trackingArea: NSTrackingArea?
     private var highlightState = HighlightState.none
     private var isHovered = false
+    private(set) var isIndented = false
 
     init(fontSize: CGFloat = 12, wrapping: Bool = false) {
         super.init(frame: .zero)
@@ -42,12 +46,14 @@ class SidePanelRow: NSView {
         titleLabel.drawsBackground = false
         titleLabel.lineBreakMode = wrapping ? .byWordWrapping : .byTruncatingTail
         titleLabel.maximumNumberOfLines = wrapping ? 2 : 1
+        titleLabel.cell?.wraps = wrapping
         titleLabel.font = NSFont.systemFont(ofSize: fontSize)
         titleLabel.textColor = .labelColor
         addSubview(titleLabel)
 
+        titleLeadingConstraint = titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8 + Self.iconSize + 6)
         NSLayoutConstraint.activate([
-            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8 + Self.iconSize + 6),
+            titleLeadingConstraint,
             titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
         ])
@@ -57,7 +63,7 @@ class SidePanelRow: NSView {
         fatalError("Class only supports programmatic initialization")
     }
 
-    func update(_ window: Window, highlightState: HighlightState) {
+    func update(_ window: Window, highlightState: HighlightState, isIndented: Bool = false) {
         iconLayer.isHidden = false
         if let icon = window.icon {
             iconLayer.contents = icon
@@ -69,6 +75,8 @@ class SidePanelRow: NSView {
         titleLabel.stringValue = windowTitle.isEmpty ? appName : windowTitle
         titleLabel.textColor = .labelColor
         self.highlightState = highlightState
+        self.isIndented = isIndented
+        applyIndent()
         updateBackground()
         onClick = { [weak window] in window?.focus() }
         onMiddleClick = { [weak window] in window?.close() }
@@ -80,9 +88,17 @@ class SidePanelRow: NSView {
         titleLabel.stringValue = "(empty)"
         titleLabel.textColor = .secondaryLabelColor
         self.highlightState = highlightState
+        self.isIndented = false
+        applyIndent()
         updateBackground()
         onClick = nil
         onMiddleClick = nil
+    }
+
+    private func applyIndent() {
+        let offset = isIndented ? Self.indentOffset : 0
+        iconLayer.frame.origin.x = 8 + offset
+        titleLeadingConstraint.constant = 8 + Self.iconSize + 6 + offset
     }
 
     private func updateBackground() {
@@ -106,6 +122,7 @@ class SidePanelRow: NSView {
     override func layout() {
         super.layout()
         iconLayer.frame.origin.y = (bounds.height - Self.iconSize) / 2
+        titleLabel.preferredMaxLayoutWidth = bounds.width - (8 + Self.iconSize + 6) - 8
     }
 
     override func updateTrackingAreas() {
