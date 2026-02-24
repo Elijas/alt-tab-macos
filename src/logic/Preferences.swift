@@ -82,6 +82,8 @@ class Preferences {
         "sidePanelFontSize": "12",
         "windowPanelFontSize": "12",
         "windowPanelTitleWrapping": "false",
+        "showTabHierarchyInMainPanel": "false",
+        "showTabHierarchyInSidePanel": "false",
         ]
         (0..<maxShortcutCount).forEach { index in
             values[indexToName("holdShortcut", index)] = "⌥"
@@ -148,6 +150,8 @@ class Preferences {
     static var sidePanelFontSize: Int { CachedUserDefaults.int("sidePanelFontSize") }
     static var windowPanelFontSize: Int { CachedUserDefaults.int("windowPanelFontSize") }
     static var windowPanelTitleWrapping: Bool { CachedUserDefaults.bool("windowPanelTitleWrapping") }
+    static var showTabHierarchyInMainPanel: Bool { CachedUserDefaults.bool("showTabHierarchyInMainPanel") }
+    static var showTabHierarchyInSidePanel: Bool { CachedUserDefaults.bool("showTabHierarchyInSidePanel") }
 
     // macro values
     static var appearanceStyle: AppearanceStylePreference { CachedUserDefaults.macroPref("appearanceStyle", AppearanceStylePreference.allCases) }

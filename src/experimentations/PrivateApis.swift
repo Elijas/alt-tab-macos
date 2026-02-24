@@ -243,20 +243,5 @@ func CGSCopyWindowGroup(_ cid: CGSConnectionID, _ wid: CGWindowID, _ groupType: 
 @_silgen_name("SLSCopyAssociatedWindows")
 func SLSCopyAssociatedWindows(_ cid: CGSConnectionID, _ wid: CGWindowID) -> CFArray
 
-@_silgen_name("SLSWindowQueryWindows")
-func SLSWindowQueryWindows(_ cid: CGSConnectionID, _ wids: CFArray, _ windowsCount: UInt) -> CFTypeRef
-
-@_silgen_name("SLSWindowQueryResultCopyWindows")
-func SLSWindowQueryResultCopyWindows(_ query: CFTypeRef) -> CFTypeRef
-
-@_silgen_name("SLSWindowIteratorAdvance")
-func SLSWindowIteratorAdvance(_ iterator: CFTypeRef) -> CGError
-
-@_silgen_name("SLSWindowIteratorGetParentID")
-func SLSWindowIteratorGetParentID(_ iterator: CFTypeRef) -> CGWindowID
-
-@_silgen_name("SLSWindowIteratorGetWindowID")
-func SLSWindowIteratorGetWindowID(_ iterator: CFTypeRef) -> CGWindowID
-
 @_silgen_name("SLSWindowIteratorGetTags")
 func SLSWindowIteratorGetTags(_ iterator: CFTypeRef) -> UInt

@@ -211,15 +211,44 @@ class SidePanelManager {
             // only non-invisible (non-tabbed) windows on this space
             let visibleOnSpace = Set(Spaces.windowsInSpaces([spaceId], false))
 
+            let showTabs = Preferences.showTabHierarchyInSidePanel
+
+            // infer tab parent-child relationships per-space:
+            // invisible windows from same PID as a visible window are tab children
+            if showTabs {
+                var visibleByPid = [pid_t: CGWindowID]()
+                for wid in allOnSpace {
+                    if visibleOnSpace.contains(wid), let window = windowByCgId[wid],
+                       !window.isWindowlessApp, !window.isMinimized, !window.isHidden {
+                        let pid = window.application.pid
+                        if visibleByPid[pid] == nil {
+                            visibleByPid[pid] = wid
+                        }
+                    }
+                }
+                for wid in allOnSpace {
+                    if !visibleOnSpace.contains(wid), let window = windowByCgId[wid],
+                       !window.isWindowlessApp {
+                        let pid = window.application.pid
+                        if let parentWid = visibleByPid[pid] {
+                            window.parentWindowId = parentWid
+                        } else {
+                            window.parentWindowId = 0
+                        }
+                    }
+                }
+            }
+
             var group = [Window]()
             for wid in allOnSpace {
                 let isVisible = visibleOnSpace.contains(wid)
                 if let window = windowByCgId[wid] {
+                    let isTab = showTabs && window.isTabChild
                     let dominated = seen.contains(wid)
                         || window.isWindowlessApp
                         || window.isMinimized
                         || window.isHidden
-                        || !isVisible
+                        || (!isVisible && !isTab)
                         || self.isBlacklisted(window)
                         || panelWindowNumbers.contains(Int(wid))
                     if !dominated {
@@ -227,7 +256,10 @@ class SidePanelManager {
                     }
                 }
             }
-            let sorted = group.sorted { $0.creationOrder > $1.creationOrder }
+            var sorted = group.sorted { $0.creationOrder > $1.creationOrder }
+            if showTabs {
+                sorted = Windows.orderWithTabHierarchy(sorted)
+            }
             for w in sorted { seen.insert(w.cgWindowId!) }
             groups.append(sorted)
         }

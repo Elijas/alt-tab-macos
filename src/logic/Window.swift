@@ -20,6 +20,8 @@ class Window {
     var icon: CGImage? { get { application.icon } }
     var shouldShowTheUser = true
     var isTabbed: Bool = false
+    var parentWindowId: CGWindowID = 0  // 0 = standalone, non-zero = tab child of this parent
+    var isTabChild: Bool { parentWindowId != 0 }
     var isHidden: Bool { get { application.isHidden } }
     var dockLabel: String? { get { application.dockLabel } }
     var isFullscreen = false

@@ -150,6 +150,23 @@ enum CGSSpaceMask: Int {
 @_silgen_name("CGSCopySpacesForWindows")
 func CGSCopySpacesForWindows(_ cid: CGSConnectionID, _ mask: CGSSpaceMask.RawValue, _ wids: CFArray) -> CFArray
 
+/// query WindowServer for window properties via iterator pattern
+/// used to discover tab parent-child relationships via SLSWindowIteratorGetParentID
+@_silgen_name("SLSWindowQueryWindows")
+func SLSWindowQueryWindows(_ cid: CGSConnectionID, _ wids: CFArray, _ windowsCount: UInt) -> CFTypeRef
+
+@_silgen_name("SLSWindowQueryResultCopyWindows")
+func SLSWindowQueryResultCopyWindows(_ query: CFTypeRef) -> CFTypeRef
+
+@_silgen_name("SLSWindowIteratorAdvance")
+func SLSWindowIteratorAdvance(_ iterator: CFTypeRef) -> CGError
+
+@_silgen_name("SLSWindowIteratorGetParentID")
+func SLSWindowIteratorGetParentID(_ iterator: CFTypeRef) -> CGWindowID
+
+@_silgen_name("SLSWindowIteratorGetWindowID")
+func SLSWindowIteratorGetWindowID(_ iterator: CFTypeRef) -> CGWindowID
+
 /// returns window level (see definition in CGWindowLevel.h) of provided window
 /// * macOS 10.10+
 @_silgen_name("CGSGetWindowLevel") @discardableResult

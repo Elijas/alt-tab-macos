@@ -17,11 +17,13 @@ class WindowListView: NSView {
     let rowHeight: CGFloat
     private let fontSize: CGFloat
     private let wrapping: Bool
+    private let minWidth: CGFloat
 
-    init(separatorHeight: CGFloat = 7, fontSize: CGFloat = 12, wrapping: Bool = false) {
+    init(separatorHeight: CGFloat = 7, fontSize: CGFloat = 12, wrapping: Bool = false, minWidth: CGFloat = 0) {
         self.separatorHeight = separatorHeight
         self.fontSize = fontSize
         self.wrapping = wrapping
+        self.minWidth = minWidth
         self.rowHeight = SidePanelRow.rowHeight(fontSize: fontSize, wrapping: wrapping)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
@@ -49,7 +51,7 @@ class WindowListView: NSView {
 
     /// Re-lays out rows using proportional heights when they fit, fixed rowHeight + scrolling otherwise.
     func relayoutForBounds() {
-        let width = max(bounds.width, SidePanelRow.panelWidth)
+        let width = max(bounds.width, minWidth)
         let visibleRowCount = layoutOrder.filter { if case .row = $0 { return true }; return false }.count
         let visibleSepCount = layoutOrder.filter { if case .separator = $0 { return true }; return false }.count
         let separatorTotalHeight = separatorHeight + Self.separatorPadding * 2
@@ -111,7 +113,7 @@ class WindowListView: NSView {
             if group.isEmpty {
                 yPos -= rowHeight
                 let row = rowPool[rowIndex]
-                let width = max(bounds.width, SidePanelRow.panelWidth)
+                let width = max(bounds.width, minWidth)
                 row.frame = CGRect(x: 0, y: yPos, width: width, height: rowHeight)
                 let emptyState: HighlightState
                 if gi == currentSpaceGroupIndex {
@@ -127,7 +129,7 @@ class WindowListView: NSView {
                 for window in group {
                     yPos -= rowHeight
                     let row = rowPool[rowIndex]
-                    let width = max(bounds.width, SidePanelRow.panelWidth)
+                    let width = max(bounds.width, minWidth)
                     row.frame = CGRect(x: 0, y: yPos, width: width, height: rowHeight)
                     let state: HighlightState
                     if let selectedId = selectedWindowId, window.cgWindowId == selectedId {
@@ -135,7 +137,8 @@ class WindowListView: NSView {
                     } else {
                         state = .none
                     }
-                    row.update(window, highlightState: state)
+                    let indented = Preferences.showTabHierarchyInSidePanel && window.isTabChild
+                    row.update(window, highlightState: state, isIndented: indented)
                     row.isHidden = false
                     layoutOrder.append(.row(rowIndex))
                     rowIndex += 1
@@ -146,7 +149,7 @@ class WindowListView: NSView {
                 yPos -= Self.separatorPadding
                 yPos -= separatorHeight
                 let sep = separatorPool[separatorIndex]
-                let sepWidth = max(bounds.width, SidePanelRow.panelWidth)
+                let sepWidth = max(bounds.width, minWidth)
                 sep.frame = CGRect(x: 0, y: yPos, width: sepWidth, height: separatorHeight)
                 sep.isHidden = false
                 layoutOrder.append(.separator(separatorIndex))
@@ -160,7 +163,7 @@ class WindowListView: NSView {
         for i in separatorIndex..<separatorPool.count { separatorPool[i].isHidden = true }
 
         // size the document view
-        contentStackView.frame = CGRect(x: 0, y: 0, width: max(bounds.width, SidePanelRow.panelWidth), height: contentHeight)
+        contentStackView.frame = CGRect(x: 0, y: 0, width: max(bounds.width, minWidth), height: contentHeight)
 
         return contentHeight
     }
