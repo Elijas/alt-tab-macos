@@ -11,6 +11,9 @@ class Windows {
     static var searchQuery = ""
     private static var shouldSelectBestMatchOnSearchChange = false
     private static var shouldRestoreDefaultSelectionOnSearchClear = false
+    // Group-aware sort keys: tab group members share min(key) across group
+    private static var groupLastFocusKeys = [CGWindowID: Int]()
+    private static var groupCreationKeys = [CGWindowID: Int]()
 
     static func shouldDisplay(_ window: Window) -> Bool {
         window.shouldShowTheUser && Search.matches(window, query: searchQuery)
@@ -135,15 +138,17 @@ class Windows {
 
     /// Query AX tab groups on visible windows to build child→parent mapping.
     /// Walks each visible window's AXChildren for AXTabGroup, reads tab titles,
-    /// then matches tabbed windows by (PID, title). On title collision across
-    /// tab groups, first match wins — acceptable for now since collisions are rare.
+    /// then matches any window by (PID, title). Does NOT depend on isTabbed flag
+    /// since that requires detectTabbedWindows which the side panel path doesn't call.
+    /// On title collision across tab groups, first match wins — acceptable since rare.
     static func queryAXTabGroups(_ windows: [Window]) -> [CGWindowID: CGWindowID] {
         var result = [CGWindowID: CGWindowID]()
         // forward map: "pid:title" → parentWid (from visible windows' AX tab groups)
         var titleToParent = [String: CGWindowID]()
+        // collect which wids are "parent" windows (have an AXTabGroup)
+        var parentWids = Set<CGWindowID>()
         for window in windows {
-            guard !window.isTabbed,
-                  let axElement = window.axUiElement,
+            guard let axElement = window.axUiElement,
                   let wid = window.cgWindowId,
                   let childrenAttrs = try? axElement.attributes([kAXChildrenAttribute]),
                   let children = childrenAttrs.children else { continue }
@@ -152,6 +157,7 @@ class Windows {
                       childRole.role == "AXTabGroup",
                       let tgChildren = try? child.attributes([kAXChildrenAttribute]),
                       let tabs = tgChildren.children else { continue }
+                parentWids.insert(wid)
                 for tab in tabs {
                     guard let tabAttrs = try? tab.attributes([kAXRoleAttribute, kAXTitleAttribute]),
                           tabAttrs.role == "AXRadioButton",
@@ -163,10 +169,10 @@ class Windows {
                 }
             }
         }
-        // match tabbed windows by (pid, title)
+        // match windows by (pid, title) — a window is a tab child if its title
+        // appears in a parent's AXTabGroup and it's not the parent itself
         for window in windows {
-            guard window.isTabbed,
-                  let wid = window.cgWindowId else { continue }
+            guard let wid = window.cgWindowId, !parentWids.contains(wid) else { continue }
             let title = window.title ?? ""
             guard !title.isEmpty else { continue }
             let key = "\(window.application.pid):\(title)"

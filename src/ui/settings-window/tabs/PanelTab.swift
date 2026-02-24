@@ -39,33 +39,33 @@ class PanelTab {
         })
         sideTable.addRow(leftText: "Show tabs as indented items", rightViews: [tabHierarchySwitch])
 
-        // "Window Panel" group
+        // "Main Panel" group
         let openButton = NSButton(title: "Open", target: nil, action: nil)
         openButton.bezelStyle = .rounded
         openButton.onAction = { _ in
-            SidePanelManager.shared.openWindowPanel()
+            SidePanelManager.shared.openMainPanel()
         }
 
-        let windowPanelRebuildAction: ActionClosure = { _ in
+        let mainPanelRebuildAction: ActionClosure = { _ in
             SidePanelManager.shared.applySeparatorSizes()
         }
-        let openOnStartupSwitch = LabelAndControl.makeSwitch("windowPanelOpenOnStartup")
-        let winSepSlider = LabelAndControl.makeLabelWithSlider("", "windowPanelSeparatorSize", 0, 20, 0, false, "px", width: 140, extraAction: separatorAction)
-        let winFontSlider = LabelAndControl.makeLabelWithSlider("", "windowPanelFontSize", 9, 20, 0, false, "pt", width: 140, extraAction: windowPanelRebuildAction)
-        let wrappingSwitch = LabelAndControl.makeSwitch("windowPanelTitleWrapping", extraAction: windowPanelRebuildAction)
+        let openOnStartupSwitch = LabelAndControl.makeSwitch("mainPanelOpenOnStartup")
+        let winSepSlider = LabelAndControl.makeLabelWithSlider("", "mainPanelSeparatorSize", 0, 20, 0, false, "px", width: 140, extraAction: separatorAction)
+        let winFontSlider = LabelAndControl.makeLabelWithSlider("", "mainPanelFontSize", 9, 20, 0, false, "pt", width: 140, extraAction: mainPanelRebuildAction)
+        let wrappingSwitch = LabelAndControl.makeSwitch("mainPanelTitleWrapping", extraAction: mainPanelRebuildAction)
 
-        let windowTable = TableGroupView(title: "Window Panel", width: SettingsWindow.contentWidth)
+        let windowTable = TableGroupView(title: "Main Panel", width: SettingsWindow.contentWidth)
         windowTable.addRow(leftText: "All-screen overview", rightViews: [openButton])
         windowTable.addRow(leftText: "Open on startup", rightViews: [openOnStartupSwitch])
         windowTable.addRow(leftText: "Space separator", rightViews: [winSepSlider[1], winSepSlider[2]])
         windowTable.addRow(leftText: "Font size", rightViews: [winFontSlider[1], winFontSlider[2]])
         windowTable.addRow(leftText: "Wrap titles", rightViews: [wrappingSwitch])
 
-        // "Main Panel" group (the ⌥Tab switcher)
-        let mainTabSwitch = LabelAndControl.makeSwitch("showTabHierarchyInMainPanel")
-        let mainTable = TableGroupView(title: "Main Panel", width: SettingsWindow.contentWidth)
-        mainTable.addRow(leftText: "Show tabs as indented items", rightViews: [mainTabSwitch])
+        let windowTabSwitch = LabelAndControl.makeSwitch("showTabHierarchyInMainPanel", extraAction: { _ in
+            SidePanelManager.shared.refreshPanels()
+        })
+        windowTable.addRow(leftText: "Show tabs as indented items", rightViews: [windowTabSwitch])
 
-        return TableGroupSetView(originalViews: [sideTable, windowTable, mainTable], bottomPadding: 0)
+        return TableGroupSetView(originalViews: [sideTable, windowTable], bottomPadding: 0)
     }
 }

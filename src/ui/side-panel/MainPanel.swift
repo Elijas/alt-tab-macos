@@ -6,9 +6,10 @@ struct ScreenColumnData {
     let selectedWindowId: CGWindowID?
     let isActiveScreen: Bool
     let currentSpaceGroupIndex: Int?
+    let showTabHierarchy: Bool
 }
 
-class WindowPanel: NSPanel {
+class MainPanel: NSPanel {
     private static let columnPadding: CGFloat = 8
     private static let headerHeight: CGFloat = 24
     private static let separatorWidth: CGFloat = 1
@@ -21,14 +22,14 @@ class WindowPanel: NSPanel {
         super.init(contentRect: CGRect(x: 0, y: 0, width: 300, height: 400),
                    styleMask: [.titled, .closable, .miniaturizable, .resizable],
                    backing: .buffered, defer: false)
-        title = "Window Panel"
+        title = "Main Panel"
         level = .floating
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
-        if setFrameUsingName("WindowPanel") {
+        if setFrameUsingName("MainPanel") {
             needsInitialSizing = false
         }
-        setFrameAutosaveName("WindowPanel")
+        setFrameAutosaveName("MainPanel")
         minSize = NSSize(width: 260, height: 200)
         delegate = self
     }
@@ -41,12 +42,12 @@ class WindowPanel: NSPanel {
         // adjust column count to match screen count
         while columns.count < screenData.count {
             let header = NSTextField(labelWithString: "")
-            header.font = NSFont.boldSystemFont(ofSize: CGFloat(Preferences.windowPanelFontSize))
+            header.font = NSFont.boldSystemFont(ofSize: CGFloat(Preferences.mainPanelFontSize))
             header.textColor = .labelColor
             header.translatesAutoresizingMaskIntoConstraints = false
             contentView.addSubview(header)
 
-            let listView = WindowListView(separatorHeight: CGFloat(Preferences.windowPanelSeparatorSize), fontSize: CGFloat(Preferences.windowPanelFontSize), wrapping: Preferences.windowPanelTitleWrapping)
+            let listView = WindowListView(separatorHeight: CGFloat(Preferences.mainPanelSeparatorSize), fontSize: CGFloat(Preferences.mainPanelFontSize), wrapping: Preferences.mainPanelTitleWrapping)
             contentView.addSubview(listView)
 
             columns.append((header: header, listView: listView))
@@ -79,6 +80,7 @@ class WindowPanel: NSPanel {
         var maxContentHeight: CGFloat = 0
         for (i, data) in screenData.enumerated() {
             columns[i].header.stringValue = data.screenName
+            columns[i].listView.showTabHierarchy = data.showTabHierarchy
             let contentHeight = columns[i].listView.updateContents(
                 data.groups,
                 selectedWindowId: data.selectedWindowId,
@@ -141,7 +143,7 @@ class WindowPanel: NSPanel {
     }
 }
 
-extension WindowPanel: NSWindowDelegate {
+extension MainPanel: NSWindowDelegate {
     func windowDidResize(_ notification: Notification) {
         layoutColumns()
     }

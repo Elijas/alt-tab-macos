@@ -76,14 +76,15 @@ class Preferences {
         "sidePanelEnabled": "true",
         "sidePanelOpacity": "87",
         "sidePanelHoverOpacity": "100",
-        "windowPanelOpenOnStartup": "false",
+        "mainPanelOpenOnStartup": "false",
         "sidePanelSeparatorSize": "3",
-        "windowPanelSeparatorSize": "7",
+        "mainPanelSeparatorSize": "7",
         "sidePanelFontSize": "12",
-        "windowPanelFontSize": "12",
-        "windowPanelTitleWrapping": "false",
+        "mainPanelFontSize": "12",
+        "mainPanelTitleWrapping": "false",
         "showTabHierarchyInMainPanel": "false",
         "showTabHierarchyInSidePanel": "false",
+        "groupTabsInSortOrder": "true",
         ]
         (0..<maxShortcutCount).forEach { index in
             values[indexToName("holdShortcut", index)] = "⌥"
@@ -144,14 +145,15 @@ class Preferences {
     static var sidePanelEnabled: Bool { CachedUserDefaults.bool("sidePanelEnabled") }
     static var sidePanelOpacity: Int { CachedUserDefaults.int("sidePanelOpacity") }
     static var sidePanelHoverOpacity: Int { CachedUserDefaults.int("sidePanelHoverOpacity") }
-    static var windowPanelOpenOnStartup: Bool { CachedUserDefaults.bool("windowPanelOpenOnStartup") }
+    static var mainPanelOpenOnStartup: Bool { CachedUserDefaults.bool("mainPanelOpenOnStartup") }
     static var sidePanelSeparatorSize: Int { CachedUserDefaults.int("sidePanelSeparatorSize") }
-    static var windowPanelSeparatorSize: Int { CachedUserDefaults.int("windowPanelSeparatorSize") }
+    static var mainPanelSeparatorSize: Int { CachedUserDefaults.int("mainPanelSeparatorSize") }
     static var sidePanelFontSize: Int { CachedUserDefaults.int("sidePanelFontSize") }
-    static var windowPanelFontSize: Int { CachedUserDefaults.int("windowPanelFontSize") }
-    static var windowPanelTitleWrapping: Bool { CachedUserDefaults.bool("windowPanelTitleWrapping") }
+    static var mainPanelFontSize: Int { CachedUserDefaults.int("mainPanelFontSize") }
+    static var mainPanelTitleWrapping: Bool { CachedUserDefaults.bool("mainPanelTitleWrapping") }
     static var showTabHierarchyInMainPanel: Bool { CachedUserDefaults.bool("showTabHierarchyInMainPanel") }
     static var showTabHierarchyInSidePanel: Bool { CachedUserDefaults.bool("showTabHierarchyInSidePanel") }
+    static var groupTabsInSortOrder: Bool { CachedUserDefaults.bool("groupTabsInSortOrder") }
 
     // macro values
     static var appearanceStyle: AppearanceStylePreference { CachedUserDefaults.macroPref("appearanceStyle", AppearanceStylePreference.allCases) }
