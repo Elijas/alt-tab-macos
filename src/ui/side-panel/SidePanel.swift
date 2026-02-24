@@ -8,7 +8,7 @@ class SidePanel: NSPanel {
 
     private static var isLeftAligned: Bool = UserDefaults.standard.bool(forKey: leftAlignedDefaultsKey)
 
-    private let listView = WindowListView(separatorHeight: CGFloat(Preferences.sidePanelSeparatorSize))
+    private let listView = WindowListView(separatorHeight: CGFloat(Preferences.sidePanelSeparatorSize), fontSize: CGFloat(Preferences.sidePanelFontSize))
     let targetScreen: NSScreen
     private let buttonBar = NSView()
     private var lrButton: NSButton!

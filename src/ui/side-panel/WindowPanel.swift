@@ -41,12 +41,12 @@ class WindowPanel: NSPanel {
         // adjust column count to match screen count
         while columns.count < screenData.count {
             let header = NSTextField(labelWithString: "")
-            header.font = NSFont.boldSystemFont(ofSize: 12)
+            header.font = NSFont.boldSystemFont(ofSize: CGFloat(Preferences.windowPanelFontSize))
             header.textColor = .labelColor
             header.translatesAutoresizingMaskIntoConstraints = false
             contentView.addSubview(header)
 
-            let listView = WindowListView(separatorHeight: CGFloat(Preferences.windowPanelSeparatorSize))
+            let listView = WindowListView(separatorHeight: CGFloat(Preferences.windowPanelSeparatorSize), fontSize: CGFloat(Preferences.windowPanelFontSize), wrapping: Preferences.windowPanelTitleWrapping)
             contentView.addSubview(listView)
 
             columns.append((header: header, listView: listView))
