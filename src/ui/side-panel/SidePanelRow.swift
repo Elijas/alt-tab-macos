@@ -29,6 +29,7 @@ class SidePanelRow: NSView {
     private var highlightState = HighlightState.none
     private var isHovered = false
     private(set) var isIndented = false
+    private(set) var isEmpty = false
 
     init(fontSize: CGFloat = 12, wrapping: Bool = false) {
         super.init(frame: .zero)
@@ -64,6 +65,7 @@ class SidePanelRow: NSView {
     }
 
     func update(_ window: Window, highlightState: HighlightState, isIndented: Bool = false) {
+        isEmpty = false
         isHovered = false
         iconLayer.isHidden = false
         if let icon = window.icon {
@@ -84,6 +86,7 @@ class SidePanelRow: NSView {
     }
 
     func showEmpty(highlightState: HighlightState = .none) {
+        isEmpty = true
         isHovered = false
         iconLayer.isHidden = true
         iconLayer.contents = nil
@@ -139,6 +142,8 @@ class SidePanelRow: NSView {
         trackingArea = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
         addTrackingArea(trackingArea!)
     }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseEntered(with event: NSEvent) {
         isHovered = true

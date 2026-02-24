@@ -183,6 +183,67 @@ class Windows {
         return result
     }
 
+    /// Compute group-aware sort keys for tab groups.
+    /// Windows in a tab group all get min(keyPath) across group members.
+    /// Windows not in any group keep their own value.
+    static func groupSortKeys(_ windows: [Window], tabParentMap: [CGWindowID: CGWindowID], keyPath: KeyPath<Window, Int>) -> [CGWindowID: Int] {
+        // Build wid → window lookup
+        var windowByWid = [CGWindowID: Window]()
+        for window in windows {
+            guard let wid = window.cgWindowId else { continue }
+            windowByWid[wid] = window
+        }
+        // Build parent → [children] from tabParentMap
+        var childrenByParent = [CGWindowID: [Window]]()
+        for (childWid, parentWid) in tabParentMap {
+            if let childWindow = windowByWid[childWid] {
+                childrenByParent[parentWid, default: []].append(childWindow)
+            }
+        }
+        // For each group (parent + its children), find min(keyPath)
+        var result = [CGWindowID: Int]()
+        for (parentWid, children) in childrenByParent {
+            var groupValues = children.map { $0[keyPath: keyPath] }
+            if let parentWindow = windowByWid[parentWid] {
+                groupValues.append(parentWindow[keyPath: keyPath])
+            }
+            guard let minVal = groupValues.min() else { continue }
+            // Assign min to all group members
+            if windowByWid[parentWid] != nil {
+                result[parentWid] = minVal
+            }
+            for child in children {
+                if let wid = child.cgWindowId {
+                    result[wid] = minVal
+                }
+            }
+        }
+        // Windows not in any group keep their own value
+        for window in windows {
+            guard let wid = window.cgWindowId else { continue }
+            if result[wid] == nil {
+                result[wid] = window[keyPath: keyPath]
+            }
+        }
+        return result
+    }
+
+    /// Look up group-aware lastFocusOrder; falls back to window's own value.
+    private static func effectiveLastFocusOrder(_ window: Window) -> Int {
+        if let wid = window.cgWindowId, let key = groupLastFocusKeys[wid] {
+            return key
+        }
+        return window.lastFocusOrder
+    }
+
+    /// Look up group-aware creationOrder; falls back to window's own value.
+    private static func effectiveCreationOrder(_ window: Window) -> Int {
+        if let wid = window.cgWindowId, let key = groupCreationKeys[wid] {
+            return key
+        }
+        return window.creationOrder
+    }
+
     static func updatesBeforeShowing() -> Bool {
         if list.count == 0 || MissionControl.state() == .showAllWindows || MissionControl.state() == .showFrontWindows { return false }
         // TODO: find a way to update space info when spaces are changed, instead of on every trigger
@@ -198,9 +259,19 @@ class Windows {
             refreshIfWindowShouldBeShownToTheUser(window)
         }
         refreshWhichWindowsToShowTheUser()
+        // Always compute tab groups — needed for sort stability even without display hierarchy
+        let parentMap = queryAXTabGroups(list)
+        // Compute group sort keys so tab group members cluster together in sort
+        if Preferences.groupTabsInSortOrder {
+            groupLastFocusKeys = groupSortKeys(list, tabParentMap: parentMap, keyPath: \.lastFocusOrder)
+            groupCreationKeys = groupSortKeys(list, tabParentMap: parentMap, keyPath: \.creationOrder)
+        } else {
+            groupLastFocusKeys.removeAll()
+            groupCreationKeys.removeAll()
+        }
         sort()
+        // Display-only: indentation + child-after-parent reordering
         if Preferences.showTabHierarchyInMainPanel {
-            let parentMap = queryAXTabGroups(list)
             for window in list {
                 if let wid = window.cgWindowId {
                     window.parentWindowId = parentMap[wid] ?? 0
@@ -511,7 +582,7 @@ class Windows {
                 let score0 = Search.relevance(for: $0, query: trimmedQuery)
                 let score1 = Search.relevance(for: $1, query: trimmedQuery)
                 if score0 != score1 { return score0 > score1 }
-                return $0.lastFocusOrder < $1.lastFocusOrder
+                return effectiveLastFocusOrder($0) < effectiveLastFocusOrder($1)
             }
             // separate buckets for these types of windows
             if Preferences.showWindowlessApps[App.app.shortcutIndex] == .showAtTheEnd && $0.isWindowlessApp != $1.isWindowlessApp {
@@ -526,9 +597,15 @@ class Windows {
             // sort within each buckets
             let sortType = Preferences.windowOrder[App.app.shortcutIndex]
             if sortType == .recentlyFocused {
+                let g0 = effectiveLastFocusOrder($0)
+                let g1 = effectiveLastFocusOrder($1)
+                if g0 != g1 { return g0 < g1 }
                 return $0.lastFocusOrder < $1.lastFocusOrder
             }
             if sortType == .recentlyCreated {
+                let g0 = effectiveCreationOrder($0)
+                let g1 = effectiveCreationOrder($1)
+                if g0 != g1 { return g1 < g0 }
                 return $1.creationOrder < $0.creationOrder
             }
             var order = ComparisonResult.orderedSame
@@ -550,7 +627,10 @@ class Windows {
                 }
             }
             if order == .orderedSame {
-                order = $0.lastFocusOrder.compare($1.lastFocusOrder)
+                order = effectiveLastFocusOrder($0).compare(effectiveLastFocusOrder($1))
+                if order == .orderedSame {
+                    order = $0.lastFocusOrder.compare($1.lastFocusOrder)
+                }
             }
             return order == .orderedAscending
         }

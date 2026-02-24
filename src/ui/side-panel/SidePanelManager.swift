@@ -145,6 +145,16 @@ class SidePanelManager {
             if let wid = window.cgWindowId { windowByCgId[wid] = window }
         }
 
+        // Compute tab parent map when any tab-aware feature needs it (AX IPC is expensive)
+        let needsTabInfo = Preferences.showTabHierarchyInSidePanel || Preferences.showTabHierarchyInMainPanel || Preferences.groupTabsInSortOrder
+        let tabParentMap: [CGWindowID: CGWindowID] = needsTabInfo ? Windows.queryAXTabGroups(Array(windowByCgId.values)) : [:]
+        let groupCreationKeys: [CGWindowID: Int]
+        if Preferences.groupTabsInSortOrder {
+            groupCreationKeys = Windows.groupSortKeys(Array(windowByCgId.values), tabParentMap: tabParentMap, keyPath: \.creationOrder)
+        } else {
+            groupCreationKeys = [:]
+        }
+
         var allScreenData = [ScreenColumnData]()
 
         // sort screens left-to-right; ties broken top-to-bottom (higher Quartz Y = physically higher)
@@ -160,7 +170,7 @@ class SidePanelManager {
 
             // feed matching side panel (uses side panel pref)
             if let panel = panels[screenUuid] {
-                let result = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInSidePanel)
+                let result = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInSidePanel, tabParentMap: tabParentMap, groupCreationKeys: groupCreationKeys)
                 panel.updateContents(result.groups, selectedWindowId: result.selectedWindowId, isActiveScreen: result.isActiveScreen, currentSpaceGroupIndex: result.currentSpaceGroupIndex, showTabHierarchy: Preferences.showTabHierarchyInSidePanel)
             }
 
@@ -172,7 +182,7 @@ class SidePanelManager {
                 let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 0
                 screenName = "Screen \(index)"
             }
-            let wpResult = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInMainPanel)
+            let wpResult = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInMainPanel, tabParentMap: tabParentMap, groupCreationKeys: groupCreationKeys)
             allScreenData.append(ScreenColumnData(
                 screenName: screenName,
                 groups: wpResult.groups,
@@ -192,7 +202,9 @@ class SidePanelManager {
         screenUuid: ScreenUuid,
         windowByCgId: [CGWindowID: Window],
         panelWindowNumbers: Set<Int>,
-        showTabHierarchy: Bool
+        showTabHierarchy: Bool,
+        tabParentMap: [CGWindowID: CGWindowID],
+        groupCreationKeys: [CGWindowID: Int]
     ) -> (groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int?) {
         let screenSpaces = Spaces.screenSpacesMap[screenUuid] ?? []
 
@@ -205,11 +217,9 @@ class SidePanelManager {
 
         let currentSpaceId = Spaces.currentSpaceForScreen[screenUuid]
 
-        // AX-based tab parent mapping (computed once, used per-space)
+        // Tab parent map is precomputed in refreshPanelsNow; apply display parentage only when tabs shown
         let showTabs = showTabHierarchy
-        var tabParentMap = [CGWindowID: CGWindowID]()
         if showTabs {
-            tabParentMap = Windows.queryAXTabGroups(Array(windowByCgId.values))
             for (childWid, parentWid) in tabParentMap {
                 windowByCgId[childWid]?.parentWindowId = parentWid
             }
@@ -266,7 +276,12 @@ class SidePanelManager {
                     }
                 }
             }
-            var sorted = group.sorted { $0.creationOrder > $1.creationOrder }
+            var sorted = group.sorted { w0, w1 in
+                let k0 = w0.cgWindowId.flatMap { groupCreationKeys[$0] } ?? w0.creationOrder
+                let k1 = w1.cgWindowId.flatMap { groupCreationKeys[$0] } ?? w1.creationOrder
+                if k0 != k1 { return k0 > k1 }
+                return w0.creationOrder > w1.creationOrder
+            }
             if showTabs {
                 sorted = Windows.orderWithTabHierarchy(sorted)
             }

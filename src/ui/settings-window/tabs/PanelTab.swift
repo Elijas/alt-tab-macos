@@ -39,6 +39,11 @@ class PanelTab {
         })
         sideTable.addRow(leftText: "Show tabs as indented items", rightViews: [tabHierarchySwitch])
 
+        let groupSortSwitch = LabelAndControl.makeSwitch("groupTabsInSortOrder", extraAction: { _ in
+            SidePanelManager.shared.refreshPanels()
+        })
+        sideTable.addRow(leftText: "Group tabs in sort order", rightViews: [groupSortSwitch])
+
         // "Main Panel" group
         let openButton = NSButton(title: "Open", target: nil, action: nil)
         openButton.bezelStyle = .rounded

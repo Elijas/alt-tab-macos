@@ -13,9 +13,11 @@ class MainPanel: NSPanel {
     private static let columnPadding: CGFloat = 8
     private static let headerHeight: CGFloat = 24
     private static let separatorWidth: CGFloat = 1
+    private static let collapsedColumnWidth: CGFloat = 20
 
     private var columns = [(header: NSTextField, listView: WindowListView)]()
     private var columnSeparators = [NSView]()
+    private var columnHasWindows = [Bool]()
     private var needsInitialSizing = true
 
     init() {
@@ -76,10 +78,14 @@ class MainPanel: NSPanel {
             }
         }
 
-        // update content and compute sizes
+        // update content, determine which columns are empty
+        let canCollapse = screenData.count > 1
         var maxContentHeight: CGFloat = 0
+        columnHasWindows = []
         for (i, data) in screenData.enumerated() {
-            columns[i].header.stringValue = data.screenName
+            let hasWindows = data.groups.contains { !$0.isEmpty }
+            columnHasWindows.append(hasWindows)
+
             columns[i].listView.showTabHierarchy = data.showTabHierarchy
             let contentHeight = columns[i].listView.updateContents(
                 data.groups,
@@ -88,15 +94,36 @@ class MainPanel: NSPanel {
                 currentSpaceGroupIndex: data.currentSpaceGroupIndex
             )
             maxContentHeight = max(maxContentHeight, contentHeight)
+
+            // Collapsed empty columns: vertical text, smaller font
+            let collapsed = !hasWindows && canCollapse
+            if collapsed {
+                columns[i].header.stringValue = data.screenName.map { String($0) }.joined(separator: "\n")
+                columns[i].header.maximumNumberOfLines = 0
+                columns[i].header.alignment = .center
+                columns[i].header.font = NSFont.systemFont(ofSize: 9)
+                columns[i].header.textColor = .secondaryLabelColor
+            } else {
+                columns[i].header.stringValue = data.screenName
+                columns[i].header.maximumNumberOfLines = 1
+                columns[i].header.alignment = .natural
+                columns[i].header.font = NSFont.boldSystemFont(ofSize: CGFloat(Preferences.mainPanelFontSize))
+                columns[i].header.textColor = .labelColor
+            }
         }
 
-        // initial sizing: compute ideal window size and center on screen
+        // initial sizing: account for collapsed columns being narrower
         if needsInitialSizing {
             needsInitialSizing = false
 
-            let columnCount = CGFloat(screenData.count)
-            let separatorCount = max(columnCount - 1, 0)
-            let totalWidth = columnCount * SidePanelRow.panelWidth
+            let normalCount = canCollapse ? CGFloat(columnHasWindows.filter { $0 }.count) : CGFloat(screenData.count)
+            let collapsedCount = canCollapse ? CGFloat(screenData.count) - normalCount : 0
+            // If all columns are empty in multi-monitor, treat them all as normal
+            let effectiveNormal = normalCount == 0 ? CGFloat(screenData.count) : normalCount
+            let effectiveCollapsed = normalCount == 0 ? CGFloat(0) : collapsedCount
+            let separatorCount = max(CGFloat(screenData.count) - 1, 0)
+            let totalWidth = effectiveNormal * SidePanelRow.panelWidth
+                + effectiveCollapsed * Self.collapsedColumnWidth
                 + separatorCount * Self.separatorWidth
                 + Self.columnPadding * 2
 
@@ -120,20 +147,47 @@ class MainPanel: NSPanel {
     private func layoutColumns() {
         guard let contentView, !columns.isEmpty else { return }
         let bounds = contentView.bounds
-        let columnCount = CGFloat(columns.count)
-        let separatorCount = max(columnCount - 1, 0)
-        let availableWidth = bounds.width - Self.columnPadding * 2 - separatorCount * Self.separatorWidth
-        let colWidth = max(availableWidth / columnCount, 100)
+
+        // Determine which columns collapse (empty monitors in multi-monitor setup)
+        let canCollapse = columns.count > 1
+        var isCollapsed = [Bool]()
+        for i in 0..<columns.count {
+            let empty = columnHasWindows.indices.contains(i) ? !columnHasWindows[i] : false
+            isCollapsed.append(empty && canCollapse)
+        }
+        // If ALL columns would collapse, show them all normally instead
+        if isCollapsed.allSatisfy({ $0 }) {
+            isCollapsed = Array(repeating: false, count: columns.count)
+        }
+
+        let collapsedCount = CGFloat(isCollapsed.filter { $0 }.count)
+        let normalCount = CGFloat(columns.count) - collapsedCount
+        let separatorCount = max(CGFloat(columns.count) - 1, 0)
+        let totalCollapsedWidth = collapsedCount * Self.collapsedColumnWidth
+        let availableForNormal = bounds.width - Self.columnPadding * 2 - separatorCount * Self.separatorWidth - totalCollapsedWidth
+        let normalColWidth = normalCount > 0 ? max(availableForNormal / normalCount, 100) : 100
 
         var x = Self.columnPadding
         for (i, col) in columns.enumerated() {
-            col.header.frame = CGRect(x: x, y: bounds.height - Self.headerHeight,
-                                      width: colWidth, height: Self.headerHeight)
+            col.header.translatesAutoresizingMaskIntoConstraints = true
             col.listView.translatesAutoresizingMaskIntoConstraints = true
-            col.listView.frame = CGRect(x: x, y: 0, width: colWidth,
-                                        height: bounds.height - Self.headerHeight)
-            col.listView.relayoutForBounds()
-            x += colWidth
+
+            if isCollapsed[i] {
+                // Collapsed: thin bar with vertical monitor name
+                col.header.frame = CGRect(x: x, y: 0, width: Self.collapsedColumnWidth, height: bounds.height)
+                col.listView.isHidden = true
+                x += Self.collapsedColumnWidth
+            } else {
+                // Normal: header at top, listView fills remaining height
+                col.header.frame = CGRect(x: x, y: bounds.height - Self.headerHeight,
+                                          width: normalColWidth, height: Self.headerHeight)
+                col.listView.isHidden = false
+                col.listView.frame = CGRect(x: x, y: 0, width: normalColWidth,
+                                            height: bounds.height - Self.headerHeight)
+                col.listView.relayoutForBounds()
+                x += normalColWidth
+            }
+
             if i < columnSeparators.count {
                 columnSeparators[i].frame = CGRect(x: x, y: 0,
                                                    width: Self.separatorWidth, height: bounds.height)

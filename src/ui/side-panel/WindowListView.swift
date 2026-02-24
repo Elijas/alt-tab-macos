@@ -58,22 +58,26 @@ class WindowListView: NSView {
     func relayoutForBounds() {
         let width = max(bounds.width, minWidth)
         let visibleRowCount = layoutOrder.filter { if case .row = $0 { return true }; return false }.count
+        let emptyRowCount = layoutOrder.filter { if case .row(let i) = $0 { return rowPool[i].isEmpty }; return false }.count
+        let windowRowCount = visibleRowCount - emptyRowCount
         let visibleSepCount = layoutOrder.filter { if case .separator = $0 { return true }; return false }.count
         let separatorTotalHeight = separatorHeight + Self.separatorPadding * 2
         let separatorSpace = CGFloat(visibleSepCount) * separatorTotalHeight
-        let availableForRows = bounds.height - separatorSpace
+        // empty rows get capped at compactRowHeight; subtract their budget before distributing to window rows
+        let emptyRowSpace = CGFloat(emptyRowCount) * compactRowHeight
+        let availableForRows = bounds.height - separatorSpace - emptyRowSpace
 
-        let proportionalHeight = visibleRowCount > 0 ? availableForRows / CGFloat(visibleRowCount) : 0
+        let proportionalHeight = windowRowCount > 0 ? availableForRows / CGFloat(windowRowCount) : 0
 
         let effectiveRowHeight: CGFloat
         let useWrapping: Bool
         let contentHeight: CGFloat
-        if proportionalHeight >= rowHeight && visibleRowCount > 0 {
+        if proportionalHeight >= rowHeight && windowRowCount > 0 {
             // tier 1: proportional, rows fit at wrapping height
             effectiveRowHeight = proportionalHeight
             useWrapping = wrapping
             contentHeight = bounds.height
-        } else if wrapping && proportionalHeight >= compactRowHeight && visibleRowCount > 0 {
+        } else if wrapping && proportionalHeight >= compactRowHeight && windowRowCount > 0 {
             // tier 2: too tight for wrapping — switch to single-line, still proportional
             effectiveRowHeight = proportionalHeight
             useWrapping = false
@@ -96,8 +100,9 @@ class WindowListView: NSView {
         for element in layoutOrder {
             switch element {
             case .row(let i):
-                yPos -= effectiveRowHeight
-                rowPool[i].frame = CGRect(x: 0, y: yPos, width: width, height: effectiveRowHeight)
+                let h = rowPool[i].isEmpty ? compactRowHeight : effectiveRowHeight
+                yPos -= h
+                rowPool[i].frame = CGRect(x: 0, y: yPos, width: width, height: h)
             case .separator(let i):
                 yPos -= Self.separatorPadding
                 yPos -= separatorHeight
