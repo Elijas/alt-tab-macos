@@ -6,6 +6,7 @@ class SpacesEvents {
     }
 
     @objc private static func handleEvent(_ notification: Notification) {
+        SidePanelManager.shared.notifySpaceChange()
         ScreensEvents.debouncerScreenAndSpace.debounce(.spaceEvent) {
             Logger.debug { notification.name.rawValue }
             // Workaround for Safari full-screen videos

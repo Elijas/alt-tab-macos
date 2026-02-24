@@ -1,5 +1,11 @@
 import Cocoa
 
+enum HighlightState {
+    case active   // globally focused window → accent color
+    case selected // per-screen most-recent window → dark grey
+    case none
+}
+
 class SidePanelRow: NSView {
     static let iconSize: CGFloat = 20
     static let rowHeight: CGFloat = 28
@@ -8,8 +14,9 @@ class SidePanelRow: NSView {
     private let iconLayer = LightImageLayer()
     private let titleLabel = NSTextField(labelWithString: "")
     private var onClick: (() -> Void)?
+    private var onMiddleClick: (() -> Void)?
     private var trackingArea: NSTrackingArea?
-    private var isFocused = false
+    private var highlightState = HighlightState.none
     private var isHovered = false
 
     override init(frame: NSRect) {
@@ -43,7 +50,7 @@ class SidePanelRow: NSView {
         fatalError("Class only supports programmatic initialization")
     }
 
-    func update(_ window: Window) {
+    func update(_ window: Window, highlightState: HighlightState) {
         iconLayer.isHidden = false
         if let icon = window.icon {
             iconLayer.contents = icon
@@ -54,30 +61,44 @@ class SidePanelRow: NSView {
         let windowTitle = window.title ?? ""
         titleLabel.stringValue = windowTitle.isEmpty ? appName : windowTitle
         titleLabel.textColor = .labelColor
-        isFocused = window.lastFocusOrder == 0
+        self.highlightState = highlightState
         updateBackground()
         onClick = { [weak window] in window?.focus() }
+        onMiddleClick = { [weak window] in window?.close() }
     }
 
-    func showEmpty() {
+    func showEmpty(highlightState: HighlightState = .none) {
         iconLayer.isHidden = true
         iconLayer.contents = nil
         titleLabel.stringValue = "(empty)"
         titleLabel.textColor = .secondaryLabelColor
-        isFocused = false
+        self.highlightState = highlightState
         updateBackground()
         onClick = nil
+        onMiddleClick = nil
     }
 
     private func updateBackground() {
         if isHovered {
             let accent: NSColor = if #available(macOS 10.14, *) { .controlAccentColor } else { .alternateSelectedControlColor }
             layer?.backgroundColor = accent.cgColor
-        } else if isFocused {
-            layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.08).cgColor
         } else {
-            layer?.backgroundColor = nil
+            switch highlightState {
+            case .active:
+                let accent: NSColor = if #available(macOS 10.14, *) { .controlAccentColor } else { .alternateSelectedControlColor }
+                layer?.backgroundColor = accent.withAlphaComponent(0.6).cgColor
+            case .selected:
+                // KNOWN UNKNOWN: grey value (white: 0.5, alpha: 0.3) needs visual tuning against vibrancy material
+                layer?.backgroundColor = NSColor(white: 0.5, alpha: 0.3).cgColor
+            case .none:
+                layer?.backgroundColor = nil
+            }
         }
+    }
+
+    override func layout() {
+        super.layout()
+        iconLayer.frame.origin.y = (bounds.height - Self.iconSize) / 2
     }
 
     override func updateTrackingAreas() {
@@ -99,5 +120,9 @@ class SidePanelRow: NSView {
 
     override func mouseUp(with event: NSEvent) {
         onClick?()
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        if event.buttonNumber == 2 { onMiddleClick?() }
     }
 }

@@ -4,6 +4,7 @@ class Spaces {
     static var currentSpaceId = CGSSpaceID(1)
     static var currentSpaceIndex = SpaceIndex(1)
     static var visibleSpaces = [CGSSpaceID]()
+    static var currentSpaceForScreen = [ScreenUuid: CGSSpaceID]()
     static var screenSpacesMap = [ScreenUuid: [CGSSpaceID]]()
     static var idsAndIndexes = [(CGSSpaceID, SpaceIndex)]()
 
@@ -41,6 +42,7 @@ class Spaces {
         idsAndIndexes.removeAll()
         screenSpacesMap.removeAll()
         visibleSpaces.removeAll()
+        currentSpaceForScreen.removeAll()
         var spaceIndex = SpaceIndex(1)
         (CGSCopyManagedDisplaySpaces(CGS_CONNECTION) as! [NSDictionary]).forEach { (screen: NSDictionary) in
             var display = screen["Display Identifier"] as! ScreenUuid
@@ -53,7 +55,9 @@ class Spaces {
                 screenSpacesMap[display, default: []].append(spaceId)
                 spaceIndex += 1
             }
-            visibleSpaces.append((screen["Current Space"] as! NSDictionary)["id64"] as! CGSSpaceID)
+            let currentSpaceId = (screen["Current Space"] as! NSDictionary)["id64"] as! CGSSpaceID
+            visibleSpaces.append(currentSpaceId)
+            currentSpaceForScreen[display] = currentSpaceId
         }
     }
 }
