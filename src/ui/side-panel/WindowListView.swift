@@ -15,6 +15,7 @@ class WindowListView: NSView {
     private var layoutOrder = [LayoutElement]()
     private(set) var separatorHeight: CGFloat
     let rowHeight: CGFloat
+    private let compactRowHeight: CGFloat
     private let fontSize: CGFloat
     private let wrapping: Bool
     private let minWidth: CGFloat
@@ -25,6 +26,7 @@ class WindowListView: NSView {
         self.wrapping = wrapping
         self.minWidth = minWidth
         self.rowHeight = SidePanelRow.rowHeight(fontSize: fontSize, wrapping: wrapping)
+        self.compactRowHeight = SidePanelRow.rowHeight(fontSize: fontSize, wrapping: false)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
@@ -49,7 +51,9 @@ class WindowListView: NSView {
         fatalError("Class only supports programmatic initialization")
     }
 
-    /// Re-lays out rows using proportional heights when they fit, fixed rowHeight + scrolling otherwise.
+    /// Re-lays out rows using proportional heights when they fit, fixed height + scrolling otherwise.
+    /// When wrapping is enabled, rows shrink proportionally down to `rowHeight` (wrapping min), then
+    /// auto-switch to compact single-line mode down to `compactRowHeight`, then scroll.
     func relayoutForBounds() {
         let width = max(bounds.width, minWidth)
         let visibleRowCount = layoutOrder.filter { if case .row = $0 { return true }; return false }.count
@@ -59,12 +63,33 @@ class WindowListView: NSView {
         let availableForRows = bounds.height - separatorSpace
 
         let proportionalHeight = visibleRowCount > 0 ? availableForRows / CGFloat(visibleRowCount) : 0
-        let useProportional = proportionalHeight >= rowHeight && visibleRowCount > 0
-        let effectiveRowHeight = useProportional ? proportionalHeight : rowHeight
 
-        let contentHeight = useProportional
-            ? bounds.height
-            : CGFloat(visibleRowCount) * rowHeight + separatorSpace
+        let effectiveRowHeight: CGFloat
+        let useWrapping: Bool
+        let contentHeight: CGFloat
+        if proportionalHeight >= rowHeight && visibleRowCount > 0 {
+            // tier 1: proportional, rows fit at wrapping height
+            effectiveRowHeight = proportionalHeight
+            useWrapping = wrapping
+            contentHeight = bounds.height
+        } else if wrapping && proportionalHeight >= compactRowHeight && visibleRowCount > 0 {
+            // tier 2: too tight for wrapping — switch to single-line, still proportional
+            effectiveRowHeight = proportionalHeight
+            useWrapping = false
+            contentHeight = bounds.height
+        } else {
+            // tier 3: fixed compact height, scrolling
+            effectiveRowHeight = compactRowHeight
+            useWrapping = false
+            contentHeight = CGFloat(visibleRowCount) * compactRowHeight + separatorSpace
+        }
+
+        // update row wrapping if needed
+        if wrapping {
+            for element in layoutOrder {
+                if case .row(let i) = element { rowPool[i].setWrapping(useWrapping) }
+            }
+        }
 
         var yPos = contentHeight
         for element in layoutOrder {
