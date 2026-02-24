@@ -202,7 +202,17 @@ class SidePanelManager {
 
         let currentSpaceId = Spaces.currentSpaceForScreen[screenUuid]
 
-        // per-space grouping with per-space tab detection
+        // AX-based tab parent mapping (computed once, used per-space)
+        let showTabs = Preferences.showTabHierarchyInSidePanel
+        var tabParentMap = [CGWindowID: CGWindowID]()
+        if showTabs {
+            tabParentMap = Windows.queryAXTabGroups(Array(windowByCgId.values))
+            for (childWid, parentWid) in tabParentMap {
+                windowByCgId[childWid]?.parentWindowId = parentWid
+            }
+        }
+
+        // per-space grouping
         var groups = [[Window]]()
         var seen = Set<CGWindowID>()
         for spaceId in sortedSpaces {
@@ -211,17 +221,16 @@ class SidePanelManager {
             // only non-invisible (non-tabbed) windows on this space
             let visibleOnSpace = Set(Spaces.windowsInSpaces([spaceId], false))
 
-            let showTabs = Preferences.showTabHierarchyInSidePanel
-
             var group = [Window]()
             for wid in allOnSpace {
                 let isVisible = visibleOnSpace.contains(wid)
                 if let window = windowByCgId[wid] {
+                    let isTab = showTabs && window.isTabChild
                     let dominated = seen.contains(wid)
                         || window.isWindowlessApp
                         || window.isMinimized
                         || window.isHidden
-                        || !isVisible
+                        || (!isVisible && !isTab)
                         || self.isBlacklisted(window)
                         || panelWindowNumbers.contains(Int(wid))
                     if !dominated {
@@ -229,13 +238,21 @@ class SidePanelManager {
                     }
                 }
             }
-            var sorted = group.sorted { $0.creationOrder > $1.creationOrder }
-            // stub: fake every window after the first as a tab child for visual testing
-            // TODO: replace with real tab parent matching (AX-based) once available
-            if showTabs, let firstWid = sorted.first?.cgWindowId {
-                for (i, w) in sorted.enumerated() {
-                    w.parentWindowId = i == 0 ? 0 : firstWid
+            // pull in tabbed windows with spaces=[] whose parent is in this group
+            if showTabs {
+                let groupWids = Set(group.compactMap { $0.cgWindowId })
+                for (childWid, parentWid) in tabParentMap {
+                    if groupWids.contains(parentWid),
+                       !seen.contains(childWid),
+                       let window = windowByCgId[childWid],
+                       !self.isBlacklisted(window),
+                       !panelWindowNumbers.contains(Int(childWid)) {
+                        group.append(window)
+                    }
                 }
+            }
+            var sorted = group.sorted { $0.creationOrder > $1.creationOrder }
+            if showTabs {
                 sorted = Windows.orderWithTabHierarchy(sorted)
             }
             for w in sorted { seen.insert(w.cgWindowId!) }
