@@ -74,6 +74,11 @@ class Preferences {
         "trackpadHapticFeedbackEnabled": "true",
         "settingsWindowShownOnFirstLaunch": "false",
         "sidePanelEnabled": "true",
+        "sidePanelOpacity": "87",
+        "sidePanelHoverOpacity": "100",
+        "windowPanelOpenOnStartup": "false",
+        "sidePanelSeparatorSize": "3",
+        "windowPanelSeparatorSize": "7",
         ]
         (0..<maxShortcutCount).forEach { index in
             values[indexToName("holdShortcut", index)] = "⌥"
@@ -132,6 +137,11 @@ class Preferences {
     static var screenRecordingPermissionSkipped: Bool { CachedUserDefaults.bool("screenRecordingPermissionSkipped") }
     static var settingsWindowShownOnFirstLaunch: Bool { CachedUserDefaults.bool("settingsWindowShownOnFirstLaunch") }
     static var sidePanelEnabled: Bool { CachedUserDefaults.bool("sidePanelEnabled") }
+    static var sidePanelOpacity: Int { CachedUserDefaults.int("sidePanelOpacity") }
+    static var sidePanelHoverOpacity: Int { CachedUserDefaults.int("sidePanelHoverOpacity") }
+    static var windowPanelOpenOnStartup: Bool { CachedUserDefaults.bool("windowPanelOpenOnStartup") }
+    static var sidePanelSeparatorSize: Int { CachedUserDefaults.int("sidePanelSeparatorSize") }
+    static var windowPanelSeparatorSize: Int { CachedUserDefaults.int("windowPanelSeparatorSize") }
 
     // macro values
     static var appearanceStyle: AppearanceStylePreference { CachedUserDefaults.macroPref("appearanceStyle", AppearanceStylePreference.allCases) }

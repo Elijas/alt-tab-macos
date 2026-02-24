@@ -5,24 +5,68 @@ class SidePanelManager {
     private static let mainAltTabBundleId = "com.lwouis.alt-tab-macos"
 
     private var panels = [ScreenUuid: SidePanel]()
+    private var windowPanel: WindowPanel?
     private var lastRefreshTimeInNanoseconds = DispatchTime.now().uptimeNanoseconds
+    private var lastSpaceChangeNanos: UInt64 = 0
     private var nextRefreshScheduled = false
     private var resolvedBlacklist: [BlacklistEntry]?
+    private var discoveryTimer: Timer?
+    private var separatorDebounce: DispatchWorkItem?
 
     private init() {}
+
+    func notifySpaceChange() {
+        lastSpaceChangeNanos = DispatchTime.now().uptimeNanoseconds
+    }
 
     func setup() {
         guard Preferences.sidePanelEnabled else { return }
         // force-discover windows on all spaces that AX events may have missed
         Applications.addMissingWindows()
         rebuildPanelsForScreenChange()
-        // delayed refresh to catch async AX discoveries
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+        if Preferences.windowPanelOpenOnStartup {
+            openWindowPanel()
+        }
+        // staggered re-discovery passes: AX brute-force scan may miss windows on
+        // other spaces if the AX subsystem hasn't registered them yet at launch.
+        // Each pass re-scans and refreshes so progressively more windows appear.
+        for delay in [1, 3, 5, 7, 10] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(delay)) { [weak self] in
+                self?.discoverMissingWindows()
+                self?.refreshPanels()
+            }
+        }
+        // periodic re-discovery: AX events miss windows on other spaces
+        discoveryTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            self?.discoverMissingWindows()
             self?.refreshPanels()
         }
     }
 
+    func applyOpacity() {
+        for (_, panel) in panels {
+            panel.applyOpacity()
+        }
+    }
+
+    func applySeparatorSizes() {
+        separatorDebounce?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.rebuildPanelsForScreenChange()
+            if self.windowPanel?.isVisible ?? false {
+                self.closeWindowPanel()
+                self.openWindowPanel()
+            }
+            self.refreshPanelsNow()
+        }
+        separatorDebounce = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
+    }
+
     func tearDown() {
+        discoveryTimer?.invalidate()
+        discoveryTimer = nil
         for (_, panel) in panels {
             panel.orderOut(nil)
         }
@@ -50,18 +94,41 @@ class SidePanelManager {
         refreshPanelsNow()
     }
 
+    // MARK: - Window Panel
+
+    func openWindowPanel() {
+        if windowPanel == nil { windowPanel = WindowPanel() }
+        windowPanel!.orderFront(nil)
+        refreshPanelsNow()
+    }
+
+    func closeWindowPanel() {
+        windowPanel?.orderOut(nil)
+        windowPanel = nil
+    }
+
+    // MARK: - Refresh
+
     func refreshPanels() {
-        guard Preferences.sidePanelEnabled else { return }
+        guard Preferences.sidePanelEnabled || (windowPanel?.isVisible ?? false) else { return }
         let throttleDelayInMs = 200
+
+        // During space transitions, CGS APIs return inconsistent window-space data.
+        // Defer all refreshes until the transition animation settles.
+        let spaceChangeCooldownMs: UInt64 = 400
+        let msSinceSpaceChange = (DispatchTime.now().uptimeNanoseconds - lastSpaceChangeNanos) / 1_000_000
+        let inSpaceCooldown = msSinceSpaceChange < spaceChangeCooldownMs
+
         let timeSinceLastRefreshInMs = Float(DispatchTime.now().uptimeNanoseconds - lastRefreshTimeInNanoseconds) / 1_000_000
-        if timeSinceLastRefreshInMs >= Float(throttleDelayInMs) {
+        if !inSpaceCooldown && timeSinceLastRefreshInMs >= Float(throttleDelayInMs) {
             lastRefreshTimeInNanoseconds = DispatchTime.now().uptimeNanoseconds
             refreshPanelsNow()
             return
         }
         guard !nextRefreshScheduled else { return }
         nextRefreshScheduled = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(throttleDelayInMs + 10)) {
+        let delayMs = inSpaceCooldown ? Int(spaceChangeCooldownMs - msSinceSpaceChange) + 10 : throttleDelayInMs + 10
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delayMs)) {
             self.nextRefreshScheduled = false
             self.refreshPanels()
         }
@@ -78,49 +145,114 @@ class SidePanelManager {
             if let wid = window.cgWindowId { windowByCgId[wid] = window }
         }
 
-        for (_, panel) in panels {
-            guard let screenUuid = panel.targetScreen.cachedUuid() else { continue }
-            let screenSpaces = Spaces.screenSpacesMap[screenUuid] ?? []
+        var allScreenData = [ScreenColumnData]()
 
-            // sort spaces in fixed Mission Control order (space 1 on top)
-            let sortedSpaces = screenSpaces.sorted { a, b in
-                let ai = Spaces.idsAndIndexes.first { $0.0 == a }?.1 ?? Int.max
-                let bi = Spaces.idsAndIndexes.first { $0.0 == b }?.1 ?? Int.max
-                return ai < bi
+        // sort screens left-to-right; ties broken top-to-bottom (higher Quartz Y = physically higher)
+        let sortedScreens = NSScreen.screens.sorted { a, b in
+            if a.frame.origin.x != b.frame.origin.x {
+                return a.frame.origin.x < b.frame.origin.x
+            }
+            return a.frame.origin.y > b.frame.origin.y
+        }
+
+        for screen in sortedScreens {
+            guard let screenUuid = screen.cachedUuid() else { continue }
+            let result = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers)
+
+            // feed matching side panel
+            if let panel = panels[screenUuid] {
+                panel.updateContents(result.groups, selectedWindowId: result.selectedWindowId, isActiveScreen: result.isActiveScreen, currentSpaceGroupIndex: result.currentSpaceGroupIndex)
             }
 
-            // per-space grouping with per-space tab detection
-            var groups = [[Window]]()
-            var seen = Set<CGWindowID>()
-            for spaceId in sortedSpaces {
-                // all windows CGS knows about on this space
-                let allOnSpace = Spaces.windowsInSpaces([spaceId])
-                // only non-invisible (non-tabbed) windows on this space
-                let visibleOnSpace = Set(Spaces.windowsInSpaces([spaceId], false))
-
-                var group = [Window]()
-                for wid in allOnSpace {
-                    let isVisible = visibleOnSpace.contains(wid)
-                    if let window = windowByCgId[wid] {
-                        let dominated = seen.contains(wid)
-                            || window.isWindowlessApp
-                            || window.isMinimized
-                            || window.isHidden
-                            || !isVisible
-                            || self.isBlacklisted(window)
-                            || panelWindowNumbers.contains(Int(wid))
-                        if !dominated {
-                            group.append(window)
-                        }
-                    }
-                }
-                let sorted = group.sorted { $0.creationOrder > $1.creationOrder }
-                for w in sorted { seen.insert(w.cgWindowId!) }
-                groups.append(sorted)
+            // collect for window panel
+            let screenName: String
+            if #available(macOS 10.15, *) {
+                screenName = screen.localizedName
+            } else {
+                let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 0
+                screenName = "Screen \(index)"
             }
-            panel.updateContents(groups)
+            allScreenData.append(ScreenColumnData(
+                screenName: screenName,
+                groups: result.groups,
+                selectedWindowId: result.selectedWindowId,
+                isActiveScreen: result.isActiveScreen,
+                currentSpaceGroupIndex: result.currentSpaceGroupIndex
+            ))
+        }
+
+        if let wp = windowPanel, wp.isVisible {
+            wp.update(allScreenData)
         }
     }
+
+    private func buildScreenGroups(
+        screenUuid: ScreenUuid,
+        windowByCgId: [CGWindowID: Window],
+        panelWindowNumbers: Set<Int>
+    ) -> (groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int?) {
+        let screenSpaces = Spaces.screenSpacesMap[screenUuid] ?? []
+
+        // sort spaces in fixed Mission Control order (space 1 on top)
+        let sortedSpaces = screenSpaces.sorted { a, b in
+            let ai = Spaces.idsAndIndexes.first { $0.0 == a }?.1 ?? Int.max
+            let bi = Spaces.idsAndIndexes.first { $0.0 == b }?.1 ?? Int.max
+            return ai < bi
+        }
+
+        let currentSpaceId = Spaces.currentSpaceForScreen[screenUuid]
+
+        // per-space grouping with per-space tab detection
+        var groups = [[Window]]()
+        var seen = Set<CGWindowID>()
+        for spaceId in sortedSpaces {
+            // all windows CGS knows about on this space
+            let allOnSpace = Spaces.windowsInSpaces([spaceId])
+            // only non-invisible (non-tabbed) windows on this space
+            let visibleOnSpace = Set(Spaces.windowsInSpaces([spaceId], false))
+
+            var group = [Window]()
+            for wid in allOnSpace {
+                let isVisible = visibleOnSpace.contains(wid)
+                if let window = windowByCgId[wid] {
+                    let dominated = seen.contains(wid)
+                        || window.isWindowlessApp
+                        || window.isMinimized
+                        || window.isHidden
+                        || !isVisible
+                        || self.isBlacklisted(window)
+                        || panelWindowNumbers.contains(Int(wid))
+                    if !dominated {
+                        group.append(window)
+                    }
+                }
+            }
+            let sorted = group.sorted { $0.creationOrder > $1.creationOrder }
+            for w in sorted { seen.insert(w.cgWindowId!) }
+            groups.append(sorted)
+        }
+
+        let currentSpaceGroupIndex: Int? = currentSpaceId.flatMap { csId in
+            sortedSpaces.firstIndex(of: csId)
+        }
+
+        // find per-screen "selected" window: lowest lastFocusOrder in the current space only
+        var selectedWindowId: CGWindowID? = nil
+        var lowestFocusOrder = Int.max
+        if let csgi = currentSpaceGroupIndex, csgi < groups.count {
+            for window in groups[csgi] {
+                if window.lastFocusOrder < lowestFocusOrder {
+                    lowestFocusOrder = window.lastFocusOrder
+                    selectedWindowId = window.cgWindowId
+                }
+            }
+        }
+        let isActiveScreen = lowestFocusOrder == 0
+
+        return (groups: groups, selectedWindowId: selectedWindowId, isActiveScreen: isActiveScreen, currentSpaceGroupIndex: currentSpaceGroupIndex)
+    }
+
+    // MARK: - Blacklist
 
     private func blacklist() -> [BlacklistEntry] {
         if let resolved = resolvedBlacklist { return resolved }
@@ -157,6 +289,68 @@ class SidePanelManager {
     }
 
     func allWindowNumbers() -> Set<Int> {
-        Set(panels.values.map { $0.windowNumber })
+        var numbers = Set(panels.values.map { $0.windowNumber })
+        if let wp = windowPanel { numbers.insert(wp.windowNumber) }
+        return numbers
+    }
+
+    // MARK: - CGWindowList Audit
+
+    /// Uses CGWindowListCopyWindowInfo to find windows the Window Server knows about
+    /// but AltTab's Windows.list doesn't. For apps with missing windows, triggers
+    /// manuallyUpdateWindows() to re-scan via AX.
+    private func discoverMissingWindows() {
+        let windowInfoList = CGWindow.windows(.optionAll)
+
+        // our own panel windows to exclude
+        let panelWindowNumbers = allWindowNumbers()
+        let tilesWindowNumber = App.app.tilesPanel.windowNumber
+
+        // system processes that never produce user windows
+        let systemProcessNames: Set<String> = [
+            "Window Server", "Dock", "SystemUIServer",
+            "Control Center", "Notification Center",
+        ]
+
+        // known CGWindowIDs from AltTab's window list
+        let knownWids = Set(Windows.list.compactMap { $0.cgWindowId })
+
+        // collect PIDs that have at least one window the Window Server sees but AltTab doesn't
+        var pidsWithMissingWindows = Set<pid_t>()
+
+        for info in windowInfoList {
+            guard let wid = info.id(),
+                  let pid = info.ownerPID(),
+                  let layer = info.layer() else { continue }
+
+            // only normal-layer windows
+            guard layer == 0 else { continue }
+
+            // only visible (non-transparent) windows
+            if let alpha = info[kCGWindowAlpha] as? Double, alpha <= 0 { continue }
+
+            // only reasonably-sized windows (skip tiny system chrome / popups)
+            guard let bounds = info.bounds(),
+                  bounds.width > 50, bounds.height > 50 else { continue }
+
+            // skip system processes
+            if let ownerName = info.ownerName(), systemProcessNames.contains(ownerName) { continue }
+
+            // skip our own panels
+            guard Int(wid) != tilesWindowNumber,
+                  !panelWindowNumbers.contains(Int(wid)) else { continue }
+
+            // if this window is missing from AltTab, mark the owning app for re-scan
+            if !knownWids.contains(wid) {
+                pidsWithMissingWindows.insert(pid)
+            }
+        }
+
+        // trigger targeted AX re-discovery only for apps with missing windows
+        for pid in pidsWithMissingWindows {
+            if let app = Applications.list.first(where: { $0.pid == pid }) {
+                app.manuallyUpdateWindows()
+            }
+        }
     }
 }

@@ -311,6 +311,8 @@
 		AA00F1B2C3D4E5F600000005 /* SidePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00F1B2C3D4E5F600000002 /* SidePanel.swift */; };
 		AA00F1B2C3D4E5F600000006 /* SidePanelManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00F1B2C3D4E5F600000003 /* SidePanelManager.swift */; };
 		AA00F1B2C3D4E5F600000008 /* PanelTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00F1B2C3D4E5F600000009 /* PanelTab.swift */; };
+		AA00F1B2C3D4E5F60000000A /* WindowListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00F1B2C3D4E5F60000000B /* WindowListView.swift */; };
+		AA00F1B2C3D4E5F60000000C /* WindowPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA00F1B2C3D4E5F60000000D /* WindowPanel.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -759,6 +761,8 @@
 		AA00F1B2C3D4E5F600000002 /* SidePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanel.swift; sourceTree = "<group>"; };
 		AA00F1B2C3D4E5F600000003 /* SidePanelManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SidePanelManager.swift; sourceTree = "<group>"; };
 		AA00F1B2C3D4E5F600000009 /* PanelTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PanelTab.swift; sourceTree = "<group>"; };
+		AA00F1B2C3D4E5F60000000B /* WindowListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowListView.swift; sourceTree = "<group>"; };
+		AA00F1B2C3D4E5F60000000D /* WindowPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WindowPanel.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1708,6 +1712,8 @@
 				AA00F1B2C3D4E5F600000001 /* SidePanelRow.swift */,
 				AA00F1B2C3D4E5F600000002 /* SidePanel.swift */,
 				AA00F1B2C3D4E5F600000003 /* SidePanelManager.swift */,
+				AA00F1B2C3D4E5F60000000B /* WindowListView.swift */,
+				AA00F1B2C3D4E5F60000000D /* WindowPanel.swift */,
 			);
 			path = "side-panel";
 			sourceTree = "<group>";
@@ -2543,6 +2549,8 @@
 				AA00F1B2C3D4E5F600000005 /* SidePanel.swift in Sources */,
 				AA00F1B2C3D4E5F600000006 /* SidePanelManager.swift in Sources */,
 				AA00F1B2C3D4E5F600000008 /* PanelTab.swift in Sources */,
+				AA00F1B2C3D4E5F60000000A /* WindowListView.swift in Sources */,
+				AA00F1B2C3D4E5F60000000C /* WindowPanel.swift in Sources */,
 				D04BAB048DE698E013577C51 /* TilesPanel.swift in Sources */,
 				D04BA69D47B5E60A6AD9CBD9 /* TileTitleView.swift in Sources */,
 				D04BA1B133D53572D7B312C2 /* TileFontIconView.swift in Sources */,

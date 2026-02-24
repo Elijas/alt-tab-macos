@@ -8,13 +8,7 @@ class SidePanel: NSPanel {
 
     private static var isLeftAligned: Bool = UserDefaults.standard.bool(forKey: leftAlignedDefaultsKey)
 
-    private static let separatorHeight: CGFloat = 1
-    private static let separatorPadding: CGFloat = 6 // 6 above + 6 below the 1px line
-
-    private let scrollView = NSScrollView()
-    private let contentStackView = NSView()
-    private var rowPool = [SidePanelRow]()
-    private var separatorPool = [NSView]()
+    private let listView = WindowListView(separatorHeight: CGFloat(Preferences.sidePanelSeparatorSize))
     let targetScreen: NSScreen
     private let buttonBar = NSView()
     private var lrButton: NSButton!
@@ -34,6 +28,7 @@ class SidePanel: NSPanel {
         backgroundColor = .clear
         collectionBehavior = .canJoinAllSpaces
         level = .floating
+        alphaValue = CGFloat(Preferences.sidePanelOpacity) / 100
         setAccessibilitySubrole(.unknown)
 
         let vibrancy = NSVisualEffectView()
@@ -43,6 +38,9 @@ class SidePanel: NSPanel {
         vibrancy.wantsLayer = true
         vibrancy.layer?.cornerRadius = 8
         contentView = vibrancy
+
+        let trackingArea = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
+        vibrancy.addTrackingArea(trackingArea)
 
         // button bar at bottom
         buttonBar.translatesAutoresizingMaskIntoConstraints = false
@@ -77,21 +75,14 @@ class SidePanel: NSPanel {
             offButton.centerYAnchor.constraint(equalTo: buttonBar.centerYAnchor),
         ])
 
-        // scroll view
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-        vibrancy.addSubview(scrollView)
-
-        contentStackView.translatesAutoresizingMaskIntoConstraints = false
-        scrollView.documentView = contentStackView
+        // list view (shared row/separator layout)
+        vibrancy.addSubview(listView)
 
         NSLayoutConstraint.activate([
-            scrollView.topAnchor.constraint(equalTo: vibrancy.topAnchor, constant: 4),
-            scrollView.bottomAnchor.constraint(equalTo: buttonBar.topAnchor),
-            scrollView.leadingAnchor.constraint(equalTo: vibrancy.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: vibrancy.trailingAnchor),
+            listView.topAnchor.constraint(equalTo: vibrancy.topAnchor, constant: 4),
+            listView.bottomAnchor.constraint(equalTo: buttonBar.topAnchor),
+            listView.leadingAnchor.constraint(equalTo: vibrancy.leadingAnchor),
+            listView.trailingAnchor.constraint(equalTo: vibrancy.trailingAnchor),
 
             buttonBar.bottomAnchor.constraint(equalTo: vibrancy.bottomAnchor),
             buttonBar.leadingAnchor.constraint(equalTo: vibrancy.leadingAnchor),
@@ -101,6 +92,18 @@ class SidePanel: NSPanel {
     }
 
     override var canBecomeKey: Bool { false }
+
+    override func mouseEntered(with event: NSEvent) {
+        alphaValue = CGFloat(Preferences.sidePanelHoverOpacity) / 100
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        alphaValue = CGFloat(Preferences.sidePanelOpacity) / 100
+    }
+
+    func applyOpacity() {
+        alphaValue = CGFloat(Preferences.sidePanelOpacity) / 100
+    }
 
     private func makeButton(_ title: String, _ action: Selector) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
@@ -153,80 +156,9 @@ class SidePanel: NSPanel {
         SidePanelManager.shared.refreshPanels()
     }
 
-    private func makeSeparator() -> NSView {
-        let sep = NSView()
-        sep.wantsLayer = true
-        if #available(macOS 10.14, *) {
-            sep.layer?.backgroundColor = NSColor.separatorColor.cgColor
-        } else {
-            sep.layer?.backgroundColor = NSColor.gridColor.cgColor
-        }
-        return sep
-    }
-
-    func updateContents(_ groups: [[Window]]) {
+    func updateContents(_ groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int? = nil) {
         caTransaction {
-            // empty groups get 1 "(empty)" row each
-            let totalRows = groups.reduce(0) { $0 + max($1.count, 1) }
-            let separatorCount = max(groups.count - 1, 0)
-            let separatorTotalHeight = Self.separatorHeight + Self.separatorPadding * 2
-
-            // grow row pool if needed
-            while rowPool.count < totalRows {
-                let row = SidePanelRow(frame: .zero)
-                rowPool.append(row)
-                contentStackView.addSubview(row)
-            }
-
-            // grow separator pool if needed
-            while separatorPool.count < separatorCount {
-                let sep = makeSeparator()
-                separatorPool.append(sep)
-                contentStackView.addSubview(sep)
-            }
-
-            // layout: groups top-to-bottom, macOS Y goes bottom-up
-            let contentHeight = CGFloat(totalRows) * SidePanelRow.rowHeight + CGFloat(separatorCount) * separatorTotalHeight
-            var rowIndex = 0
-            var separatorIndex = 0
-            var yPos = contentHeight // start from top
-
-            for (gi, group) in groups.enumerated() {
-                if group.isEmpty {
-                    yPos -= SidePanelRow.rowHeight
-                    let row = rowPool[rowIndex]
-                    row.frame = CGRect(x: 0, y: yPos, width: SidePanelRow.panelWidth, height: SidePanelRow.rowHeight)
-                    row.showEmpty()
-                    row.isHidden = false
-                    rowIndex += 1
-                } else {
-                    for window in group {
-                        yPos -= SidePanelRow.rowHeight
-                        let row = rowPool[rowIndex]
-                        row.frame = CGRect(x: 0, y: yPos, width: SidePanelRow.panelWidth, height: SidePanelRow.rowHeight)
-                        row.update(window)
-                        row.isHidden = false
-                        rowIndex += 1
-                    }
-                }
-                // separator after each group except the last
-                if gi < groups.count - 1 {
-                    yPos -= Self.separatorPadding
-                    yPos -= Self.separatorHeight
-                    let sep = separatorPool[separatorIndex]
-                    sep.frame = CGRect(x: 12, y: yPos, width: SidePanelRow.panelWidth - 24, height: Self.separatorHeight)
-                    sep.isHidden = false
-                    separatorIndex += 1
-                    yPos -= Self.separatorPadding
-                }
-            }
-
-            // hide surplus rows and separators
-            for i in rowIndex..<rowPool.count { rowPool[i].isHidden = true }
-            for i in separatorIndex..<separatorPool.count { separatorPool[i].isHidden = true }
-
-            // size the document view
-            contentStackView.frame = CGRect(x: 0, y: 0, width: SidePanelRow.panelWidth, height: contentHeight)
+            let contentHeight = listView.updateContents(groups, selectedWindowId: selectedWindowId, isActiveScreen: isActiveScreen, currentSpaceGroupIndex: currentSpaceGroupIndex)
 
             // reposition panel (clamp offset so panel edges stay on screen with buffer)
             let screenFrame = targetScreen.visibleFrame
