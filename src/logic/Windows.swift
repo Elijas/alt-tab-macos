@@ -133,6 +133,50 @@ class Windows {
         return result
     }
 
+    /// Query AX tab groups on visible windows to build child→parent mapping.
+    /// Walks each visible window's AXChildren for AXTabGroup, reads tab titles,
+    /// then matches tabbed windows by (PID, title). On title collision across
+    /// tab groups, first match wins — acceptable for now since collisions are rare.
+    static func queryAXTabGroups(_ windows: [Window]) -> [CGWindowID: CGWindowID] {
+        var result = [CGWindowID: CGWindowID]()
+        // forward map: "pid:title" → parentWid (from visible windows' AX tab groups)
+        var titleToParent = [String: CGWindowID]()
+        for window in windows {
+            guard !window.isTabbed,
+                  let axElement = window.axUiElement,
+                  let wid = window.cgWindowId,
+                  let childrenAttrs = try? axElement.attributes([kAXChildrenAttribute]),
+                  let children = childrenAttrs.children else { continue }
+            for child in children {
+                guard let childRole = try? child.attributes([kAXRoleAttribute]),
+                      childRole.role == "AXTabGroup",
+                      let tgChildren = try? child.attributes([kAXChildrenAttribute]),
+                      let tabs = tgChildren.children else { continue }
+                for tab in tabs {
+                    guard let tabAttrs = try? tab.attributes([kAXRoleAttribute, kAXTitleAttribute]),
+                          tabAttrs.role == "AXRadioButton",
+                          let title = tabAttrs.title, !title.isEmpty else { continue }
+                    let key = "\(window.application.pid):\(title)"
+                    if titleToParent[key] == nil {
+                        titleToParent[key] = wid
+                    }
+                }
+            }
+        }
+        // match tabbed windows by (pid, title)
+        for window in windows {
+            guard window.isTabbed,
+                  let wid = window.cgWindowId else { continue }
+            let title = window.title ?? ""
+            guard !title.isEmpty else { continue }
+            let key = "\(window.application.pid):\(title)"
+            if let parentWid = titleToParent[key] {
+                result[wid] = parentWid
+            }
+        }
+        return result
+    }
+
     static func updatesBeforeShowing() -> Bool {
         if list.count == 0 || MissionControl.state() == .showAllWindows || MissionControl.state() == .showFrontWindows { return false }
         // TODO: find a way to update space info when spaces are changed, instead of on every trigger
@@ -149,13 +193,11 @@ class Windows {
         }
         refreshWhichWindowsToShowTheUser()
         sort()
-        // stub: fake every window after the first as a tab child for visual testing
-        // TODO: replace with real tab parent matching (AX-based) once available
         if Preferences.showTabHierarchyInMainPanel {
-            for window in list { window.parentWindowId = 0 }
-            if let firstWid = list.first(where: { $0.shouldShowTheUser })?.cgWindowId {
-                for (i, window) in list.filter({ $0.shouldShowTheUser }).enumerated() {
-                    window.parentWindowId = i == 0 ? 0 : firstWid
+            let parentMap = queryAXTabGroups(list)
+            for window in list {
+                if let wid = window.cgWindowId {
+                    window.parentWindowId = parentMap[wid] ?? 0
                 }
             }
             reorderListForTabHierarchy()
