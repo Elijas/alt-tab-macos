@@ -14,9 +14,15 @@ class WindowListView: NSView {
     private var separatorPool = [NSView]()
     private var layoutOrder = [LayoutElement]()
     private(set) var separatorHeight: CGFloat
+    let rowHeight: CGFloat
+    private let fontSize: CGFloat
+    private let wrapping: Bool
 
-    init(separatorHeight: CGFloat = 7) {
+    init(separatorHeight: CGFloat = 7, fontSize: CGFloat = 12, wrapping: Bool = false) {
         self.separatorHeight = separatorHeight
+        self.fontSize = fontSize
+        self.wrapping = wrapping
+        self.rowHeight = SidePanelRow.rowHeight(fontSize: fontSize, wrapping: wrapping)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
 
@@ -41,7 +47,7 @@ class WindowListView: NSView {
         fatalError("Class only supports programmatic initialization")
     }
 
-    /// Re-lays out rows using proportional heights when they fit, fixed 28pt + scrolling otherwise.
+    /// Re-lays out rows using proportional heights when they fit, fixed rowHeight + scrolling otherwise.
     func relayoutForBounds() {
         let width = max(bounds.width, SidePanelRow.panelWidth)
         let visibleRowCount = layoutOrder.filter { if case .row = $0 { return true }; return false }.count
@@ -51,19 +57,19 @@ class WindowListView: NSView {
         let availableForRows = bounds.height - separatorSpace
 
         let proportionalHeight = visibleRowCount > 0 ? availableForRows / CGFloat(visibleRowCount) : 0
-        let useProportional = proportionalHeight >= SidePanelRow.rowHeight && visibleRowCount > 0
-        let rowHeight = useProportional ? proportionalHeight : SidePanelRow.rowHeight
+        let useProportional = proportionalHeight >= rowHeight && visibleRowCount > 0
+        let effectiveRowHeight = useProportional ? proportionalHeight : rowHeight
 
         let contentHeight = useProportional
             ? bounds.height
-            : CGFloat(visibleRowCount) * SidePanelRow.rowHeight + separatorSpace
+            : CGFloat(visibleRowCount) * rowHeight + separatorSpace
 
         var yPos = contentHeight
         for element in layoutOrder {
             switch element {
             case .row(let i):
-                yPos -= rowHeight
-                rowPool[i].frame = CGRect(x: 0, y: yPos, width: width, height: rowHeight)
+                yPos -= effectiveRowHeight
+                rowPool[i].frame = CGRect(x: 0, y: yPos, width: width, height: effectiveRowHeight)
             case .separator(let i):
                 yPos -= Self.separatorPadding
                 yPos -= separatorHeight
@@ -82,7 +88,7 @@ class WindowListView: NSView {
 
         // grow row pool if needed
         while rowPool.count < totalRows {
-            let row = SidePanelRow(frame: .zero)
+            let row = SidePanelRow(fontSize: fontSize, wrapping: wrapping)
             rowPool.append(row)
             contentStackView.addSubview(row)
         }
@@ -95,7 +101,7 @@ class WindowListView: NSView {
         }
 
         // layout: groups top-to-bottom, macOS Y goes bottom-up
-        let contentHeight = CGFloat(totalRows) * SidePanelRow.rowHeight + CGFloat(separatorCount) * separatorTotalHeight
+        let contentHeight = CGFloat(totalRows) * rowHeight + CGFloat(separatorCount) * separatorTotalHeight
         var rowIndex = 0
         var separatorIndex = 0
         var yPos = contentHeight // start from top
@@ -103,10 +109,10 @@ class WindowListView: NSView {
 
         for (gi, group) in groups.enumerated() {
             if group.isEmpty {
-                yPos -= SidePanelRow.rowHeight
+                yPos -= rowHeight
                 let row = rowPool[rowIndex]
                 let width = max(bounds.width, SidePanelRow.panelWidth)
-                row.frame = CGRect(x: 0, y: yPos, width: width, height: SidePanelRow.rowHeight)
+                row.frame = CGRect(x: 0, y: yPos, width: width, height: rowHeight)
                 let emptyState: HighlightState
                 if gi == currentSpaceGroupIndex {
                     emptyState = isActiveScreen ? .active : .selected
@@ -119,10 +125,10 @@ class WindowListView: NSView {
                 rowIndex += 1
             } else {
                 for window in group {
-                    yPos -= SidePanelRow.rowHeight
+                    yPos -= rowHeight
                     let row = rowPool[rowIndex]
                     let width = max(bounds.width, SidePanelRow.panelWidth)
-                    row.frame = CGRect(x: 0, y: yPos, width: width, height: SidePanelRow.rowHeight)
+                    row.frame = CGRect(x: 0, y: yPos, width: width, height: rowHeight)
                     let state: HighlightState
                     if let selectedId = selectedWindowId, window.cgWindowId == selectedId {
                         state = isActiveScreen ? .active : .selected

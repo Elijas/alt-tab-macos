@@ -8,8 +8,15 @@ enum HighlightState {
 
 class SidePanelRow: NSView {
     static let iconSize: CGFloat = 20
-    static let rowHeight: CGFloat = 28
     static let panelWidth: CGFloat = 260
+
+    static func rowHeight(fontSize: CGFloat, wrapping: Bool) -> CGFloat {
+        if wrapping {
+            return max(42, round(fontSize * 3.5))
+        } else {
+            return max(28, round(fontSize * 2.2))
+        }
+    }
 
     private let iconLayer = LightImageLayer()
     private let titleLabel = NSTextField(labelWithString: "")
@@ -19,12 +26,12 @@ class SidePanelRow: NSView {
     private var highlightState = HighlightState.none
     private var isHovered = false
 
-    override init(frame: NSRect) {
-        super.init(frame: frame)
+    init(fontSize: CGFloat = 12, wrapping: Bool = false) {
+        super.init(frame: .zero)
         wantsLayer = true
         layer?.cornerRadius = 4
 
-        iconLayer.frame = CGRect(x: 8, y: (Self.rowHeight - Self.iconSize) / 2, width: Self.iconSize, height: Self.iconSize)
+        iconLayer.frame = CGRect(x: 8, y: 0, width: Self.iconSize, height: Self.iconSize)
         iconLayer.contentsGravity = .resizeAspect
         layer!.addSublayer(iconLayer)
 
@@ -33,9 +40,9 @@ class SidePanelRow: NSView {
         titleLabel.isSelectable = false
         titleLabel.isBordered = false
         titleLabel.drawsBackground = false
-        titleLabel.lineBreakMode = .byTruncatingTail
-        titleLabel.maximumNumberOfLines = 1
-        titleLabel.font = NSFont.systemFont(ofSize: 12)
+        titleLabel.lineBreakMode = wrapping ? .byWordWrapping : .byTruncatingTail
+        titleLabel.maximumNumberOfLines = wrapping ? 2 : 1
+        titleLabel.font = NSFont.systemFont(ofSize: fontSize)
         titleLabel.textColor = .labelColor
         addSubview(titleLabel)
 

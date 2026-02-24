@@ -79,6 +79,9 @@ class Preferences {
         "windowPanelOpenOnStartup": "false",
         "sidePanelSeparatorSize": "3",
         "windowPanelSeparatorSize": "7",
+        "sidePanelFontSize": "12",
+        "windowPanelFontSize": "12",
+        "windowPanelTitleWrapping": "false",
         ]
         (0..<maxShortcutCount).forEach { index in
             values[indexToName("holdShortcut", index)] = "⌥"
@@ -142,6 +145,9 @@ class Preferences {
     static var windowPanelOpenOnStartup: Bool { CachedUserDefaults.bool("windowPanelOpenOnStartup") }
     static var sidePanelSeparatorSize: Int { CachedUserDefaults.int("sidePanelSeparatorSize") }
     static var windowPanelSeparatorSize: Int { CachedUserDefaults.int("windowPanelSeparatorSize") }
+    static var sidePanelFontSize: Int { CachedUserDefaults.int("sidePanelFontSize") }
+    static var windowPanelFontSize: Int { CachedUserDefaults.int("windowPanelFontSize") }
+    static var windowPanelTitleWrapping: Bool { CachedUserDefaults.bool("windowPanelTitleWrapping") }
 
     // macro values
     static var appearanceStyle: AppearanceStylePreference { CachedUserDefaults.macroPref("appearanceStyle", AppearanceStylePreference.allCases) }
