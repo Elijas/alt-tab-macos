@@ -213,55 +213,15 @@ class SidePanelManager {
 
             let showTabs = Preferences.showTabHierarchyInSidePanel
 
-            // match tab parent-child relationships per-space using PID heuristic;
-            // also pulls in tabbed windows with spaces=[] that CGS doesn't assign to any space
-            var extraTabbedWids = [CGWindowID]()
-            if showTabs {
-                let allOnSpaceSet = Set(allOnSpace)
-                // visible (non-tabbed) windows on this space
-                var visibleList = [(wid: CGWindowID, window: Window)]()
-                for wid in allOnSpace {
-                    if visibleOnSpace.contains(wid), let window = windowByCgId[wid],
-                       !window.isWindowlessApp, !window.isMinimized, !window.isHidden {
-                        visibleList.append((wid: wid, window: window))
-                    }
-                }
-                // tabbed candidates from two sources:
-                // (a) invisible windows already in allOnSpace (CGS knows they're on this space)
-                var tabbedList = [(wid: CGWindowID, window: Window)]()
-                for wid in allOnSpace {
-                    if !visibleOnSpace.contains(wid), let window = windowByCgId[wid],
-                       !window.isWindowlessApp {
-                        tabbedList.append((wid: wid, window: window))
-                    }
-                }
-                // (b) tabbed windows with spaces=[] that CGS doesn't assign to any space
-                for (wid, window) in windowByCgId {
-                    if window.isTabbed && !seen.contains(wid) && !allOnSpaceSet.contains(wid)
-                       && !window.isWindowlessApp {
-                        tabbedList.append((wid: wid, window: window))
-                        extraTabbedWids.append(wid)
-                    }
-                }
-                let parentMap = Windows.matchTabsToParents(visibleWindows: visibleList, tabbedWindows: tabbedList)
-                for (childWid, parentWid) in parentMap {
-                    windowByCgId[childWid]?.parentWindowId = parentWid
-                }
-                for (wid, _) in tabbedList where parentMap[wid] == nil {
-                    windowByCgId[wid]?.parentWindowId = 0
-                }
-            }
-
             var group = [Window]()
             for wid in allOnSpace {
                 let isVisible = visibleOnSpace.contains(wid)
                 if let window = windowByCgId[wid] {
-                    let isTab = showTabs && window.isTabChild
                     let dominated = seen.contains(wid)
                         || window.isWindowlessApp
                         || window.isMinimized
                         || window.isHidden
-                        || (!isVisible && !isTab)
+                        || !isVisible
                         || self.isBlacklisted(window)
                         || panelWindowNumbers.contains(Int(wid))
                     if !dominated {
@@ -269,20 +229,13 @@ class SidePanelManager {
                     }
                 }
             }
-            // pull in tabbed windows from outside allOnSpace whose parent is in this group
-            if showTabs {
-                let groupWids = Set(group.compactMap { $0.cgWindowId })
-                for wid in extraTabbedWids {
-                    if let window = windowByCgId[wid], window.isTabChild,
-                       groupWids.contains(window.parentWindowId),
-                       !self.isBlacklisted(window),
-                       !panelWindowNumbers.contains(Int(wid)) {
-                        group.append(window)
-                    }
-                }
-            }
             var sorted = group.sorted { $0.creationOrder > $1.creationOrder }
-            if showTabs {
+            // stub: fake every window after the first as a tab child for visual testing
+            // TODO: replace with real tab parent matching (AX-based) once available
+            if showTabs, let firstWid = sorted.first?.cgWindowId {
+                for (i, w) in sorted.enumerated() {
+                    w.parentWindowId = i == 0 ? 0 : firstWid
+                }
                 sorted = Windows.orderWithTabHierarchy(sorted)
             }
             for w in sorted { seen.insert(w.cgWindowId!) }
