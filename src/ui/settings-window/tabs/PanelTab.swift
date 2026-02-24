@@ -61,6 +61,11 @@ class PanelTab {
         windowTable.addRow(leftText: "Font size", rightViews: [winFontSlider[1], winFontSlider[2]])
         windowTable.addRow(leftText: "Wrap titles", rightViews: [wrappingSwitch])
 
-        return TableGroupSetView(originalViews: [sideTable, windowTable], bottomPadding: 0)
+        // "Main Panel" group (the ⌥Tab switcher)
+        let mainTabSwitch = LabelAndControl.makeSwitch("showTabHierarchyInMainPanel")
+        let mainTable = TableGroupView(title: "Main Panel", width: SettingsWindow.contentWidth)
+        mainTable.addRow(leftText: "Show tabs as indented items", rightViews: [mainTabSwitch])
+
+        return TableGroupSetView(originalViews: [sideTable, windowTable, mainTable], bottomPadding: 0)
     }
 }

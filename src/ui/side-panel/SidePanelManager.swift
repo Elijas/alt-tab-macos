@@ -213,29 +213,42 @@ class SidePanelManager {
 
             let showTabs = Preferences.showTabHierarchyInSidePanel
 
-            // infer tab parent-child relationships per-space:
-            // invisible windows from same PID as a visible window are tab children
+            // match tab parent-child relationships per-space using PID heuristic;
+            // also pulls in tabbed windows with spaces=[] that CGS doesn't assign to any space
+            var extraTabbedWids = [CGWindowID]()
             if showTabs {
-                var visibleByPid = [pid_t: CGWindowID]()
+                let allOnSpaceSet = Set(allOnSpace)
+                // visible (non-tabbed) windows on this space
+                var visibleList = [(wid: CGWindowID, window: Window)]()
                 for wid in allOnSpace {
                     if visibleOnSpace.contains(wid), let window = windowByCgId[wid],
                        !window.isWindowlessApp, !window.isMinimized, !window.isHidden {
-                        let pid = window.application.pid
-                        if visibleByPid[pid] == nil {
-                            visibleByPid[pid] = wid
-                        }
+                        visibleList.append((wid: wid, window: window))
                     }
                 }
+                // tabbed candidates from two sources:
+                // (a) invisible windows already in allOnSpace (CGS knows they're on this space)
+                var tabbedList = [(wid: CGWindowID, window: Window)]()
                 for wid in allOnSpace {
                     if !visibleOnSpace.contains(wid), let window = windowByCgId[wid],
                        !window.isWindowlessApp {
-                        let pid = window.application.pid
-                        if let parentWid = visibleByPid[pid] {
-                            window.parentWindowId = parentWid
-                        } else {
-                            window.parentWindowId = 0
-                        }
+                        tabbedList.append((wid: wid, window: window))
                     }
+                }
+                // (b) tabbed windows with spaces=[] that CGS doesn't assign to any space
+                for (wid, window) in windowByCgId {
+                    if window.isTabbed && !seen.contains(wid) && !allOnSpaceSet.contains(wid)
+                       && !window.isWindowlessApp {
+                        tabbedList.append((wid: wid, window: window))
+                        extraTabbedWids.append(wid)
+                    }
+                }
+                let parentMap = Windows.matchTabsToParents(visibleWindows: visibleList, tabbedWindows: tabbedList)
+                for (childWid, parentWid) in parentMap {
+                    windowByCgId[childWid]?.parentWindowId = parentWid
+                }
+                for (wid, _) in tabbedList where parentMap[wid] == nil {
+                    windowByCgId[wid]?.parentWindowId = 0
                 }
             }
 
@@ -252,6 +265,18 @@ class SidePanelManager {
                         || self.isBlacklisted(window)
                         || panelWindowNumbers.contains(Int(wid))
                     if !dominated {
+                        group.append(window)
+                    }
+                }
+            }
+            // pull in tabbed windows from outside allOnSpace whose parent is in this group
+            if showTabs {
+                let groupWids = Set(group.compactMap { $0.cgWindowId })
+                for wid in extraTabbedWids {
+                    if let window = windowByCgId[wid], window.isTabChild,
+                       groupWids.contains(window.parentWindowId),
+                       !self.isBlacklisted(window),
+                       !panelWindowNumbers.contains(Int(wid)) {
                         group.append(window)
                     }
                 }
