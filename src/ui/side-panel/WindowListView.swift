@@ -19,6 +19,7 @@ class WindowListView: NSView {
     private let fontSize: CGFloat
     private let wrapping: Bool
     private let minWidth: CGFloat
+    var showTabHierarchy: Bool = false
 
     init(separatorHeight: CGFloat = 7, fontSize: CGFloat = 12, wrapping: Bool = false, minWidth: CGFloat = 0) {
         self.separatorHeight = separatorHeight
@@ -162,7 +163,7 @@ class WindowListView: NSView {
                     } else {
                         state = .none
                     }
-                    let indented = Preferences.showTabHierarchyInSidePanel && window.isTabChild
+                    let indented = showTabHierarchy && window.isTabChild
                     row.update(window, highlightState: state, isIndented: indented)
                     row.isHidden = false
                     layoutOrder.append(.row(rowIndex))

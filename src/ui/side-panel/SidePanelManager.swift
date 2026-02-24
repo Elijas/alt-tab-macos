@@ -5,7 +5,7 @@ class SidePanelManager {
     private static let mainAltTabBundleId = "com.lwouis.alt-tab-macos"
 
     private var panels = [ScreenUuid: SidePanel]()
-    private var windowPanel: WindowPanel?
+    private var mainPanel: MainPanel?
     private var lastRefreshTimeInNanoseconds = DispatchTime.now().uptimeNanoseconds
     private var lastSpaceChangeNanos: UInt64 = 0
     private var nextRefreshScheduled = false
@@ -24,8 +24,8 @@ class SidePanelManager {
         // force-discover windows on all spaces that AX events may have missed
         Applications.addMissingWindows()
         rebuildPanelsForScreenChange()
-        if Preferences.windowPanelOpenOnStartup {
-            openWindowPanel()
+        if Preferences.mainPanelOpenOnStartup {
+            openMainPanel()
         }
         // staggered re-discovery passes: AX brute-force scan may miss windows on
         // other spaces if the AX subsystem hasn't registered them yet at launch.
@@ -54,9 +54,9 @@ class SidePanelManager {
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
             self.rebuildPanelsForScreenChange()
-            if self.windowPanel?.isVisible ?? false {
-                self.closeWindowPanel()
-                self.openWindowPanel()
+            if self.mainPanel?.isVisible ?? false {
+                self.closeMainPanel()
+                self.openMainPanel()
             }
             self.refreshPanelsNow()
         }
@@ -94,23 +94,23 @@ class SidePanelManager {
         refreshPanelsNow()
     }
 
-    // MARK: - Window Panel
+    // MARK: - Main Panel
 
-    func openWindowPanel() {
-        if windowPanel == nil { windowPanel = WindowPanel() }
-        windowPanel!.orderFront(nil)
+    func openMainPanel() {
+        if mainPanel == nil { mainPanel = MainPanel() }
+        mainPanel!.orderFront(nil)
         refreshPanelsNow()
     }
 
-    func closeWindowPanel() {
-        windowPanel?.orderOut(nil)
-        windowPanel = nil
+    func closeMainPanel() {
+        mainPanel?.orderOut(nil)
+        mainPanel = nil
     }
 
     // MARK: - Refresh
 
     func refreshPanels() {
-        guard Preferences.sidePanelEnabled || (windowPanel?.isVisible ?? false) else { return }
+        guard Preferences.sidePanelEnabled || (mainPanel?.isVisible ?? false) else { return }
         let throttleDelayInMs = 200
 
         // During space transitions, CGS APIs return inconsistent window-space data.
@@ -157,14 +157,14 @@ class SidePanelManager {
 
         for screen in sortedScreens {
             guard let screenUuid = screen.cachedUuid() else { continue }
-            let result = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers)
 
-            // feed matching side panel
+            // feed matching side panel (uses side panel pref)
             if let panel = panels[screenUuid] {
-                panel.updateContents(result.groups, selectedWindowId: result.selectedWindowId, isActiveScreen: result.isActiveScreen, currentSpaceGroupIndex: result.currentSpaceGroupIndex)
+                let result = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInSidePanel)
+                panel.updateContents(result.groups, selectedWindowId: result.selectedWindowId, isActiveScreen: result.isActiveScreen, currentSpaceGroupIndex: result.currentSpaceGroupIndex, showTabHierarchy: Preferences.showTabHierarchyInSidePanel)
             }
 
-            // collect for window panel
+            // collect for main panel (uses main panel pref)
             let screenName: String
             if #available(macOS 10.15, *) {
                 screenName = screen.localizedName
@@ -172,16 +172,18 @@ class SidePanelManager {
                 let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 0
                 screenName = "Screen \(index)"
             }
+            let wpResult = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInMainPanel)
             allScreenData.append(ScreenColumnData(
                 screenName: screenName,
-                groups: result.groups,
-                selectedWindowId: result.selectedWindowId,
-                isActiveScreen: result.isActiveScreen,
-                currentSpaceGroupIndex: result.currentSpaceGroupIndex
+                groups: wpResult.groups,
+                selectedWindowId: wpResult.selectedWindowId,
+                isActiveScreen: wpResult.isActiveScreen,
+                currentSpaceGroupIndex: wpResult.currentSpaceGroupIndex,
+                showTabHierarchy: Preferences.showTabHierarchyInMainPanel
             ))
         }
 
-        if let wp = windowPanel, wp.isVisible {
+        if let wp = mainPanel, wp.isVisible {
             wp.update(allScreenData)
         }
     }
@@ -189,7 +191,8 @@ class SidePanelManager {
     private func buildScreenGroups(
         screenUuid: ScreenUuid,
         windowByCgId: [CGWindowID: Window],
-        panelWindowNumbers: Set<Int>
+        panelWindowNumbers: Set<Int>,
+        showTabHierarchy: Bool
     ) -> (groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int?) {
         let screenSpaces = Spaces.screenSpacesMap[screenUuid] ?? []
 
@@ -203,7 +206,7 @@ class SidePanelManager {
         let currentSpaceId = Spaces.currentSpaceForScreen[screenUuid]
 
         // AX-based tab parent mapping (computed once, used per-space)
-        let showTabs = Preferences.showTabHierarchyInSidePanel
+        let showTabs = showTabHierarchy
         var tabParentMap = [CGWindowID: CGWindowID]()
         if showTabs {
             tabParentMap = Windows.queryAXTabGroups(Array(windowByCgId.values))
@@ -220,6 +223,17 @@ class SidePanelManager {
             let allOnSpace = Spaces.windowsInSpaces([spaceId])
             // only non-invisible (non-tabbed) windows on this space
             let visibleOnSpace = Set(Spaces.windowsInSpaces([spaceId], false))
+
+            // A visible window can never be a tab child — in macOS native tabs only one
+            // tab per group is on-screen at a time. This corrects stale parentWindowId
+            // from queryAXTabGroups when the active tab switches (the newly visible
+            // window may have nil axUiElement from when it was invisible, causing the
+            // AX query to misclassify it as a child).
+            if showTabs {
+                for wid in visibleOnSpace {
+                    windowByCgId[wid]?.parentWindowId = 0
+                }
+            }
 
             var group = [Window]()
             for wid in allOnSpace {
@@ -244,6 +258,7 @@ class SidePanelManager {
                 for (childWid, parentWid) in tabParentMap {
                     if groupWids.contains(parentWid),
                        !seen.contains(childWid),
+                       !visibleOnSpace.contains(childWid),
                        let window = windowByCgId[childWid],
                        !self.isBlacklisted(window),
                        !panelWindowNumbers.contains(Int(childWid)) {
@@ -317,7 +332,7 @@ class SidePanelManager {
 
     func allWindowNumbers() -> Set<Int> {
         var numbers = Set(panels.values.map { $0.windowNumber })
-        if let wp = windowPanel { numbers.insert(wp.windowNumber) }
+        if let wp = mainPanel { numbers.insert(wp.windowNumber) }
         return numbers
     }
 
