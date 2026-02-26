@@ -199,10 +199,17 @@ class WindowListView: NSView {
         return contentHeight
     }
 
+    static func separatorColor() -> NSColor {
+        let hex = NSAppearance.current.getThemeName() == .dark
+            ? Preferences.separatorColorDark
+            : Preferences.separatorColorLight
+        return NSColor(hex: hex)
+    }
+
     private func makeSeparator() -> NSView {
         let sep = NSView()
         sep.wantsLayer = true
-        sep.layer?.backgroundColor = NSColor.black.cgColor
+        sep.layer?.backgroundColor = WindowListView.separatorColor().cgColor
         return sep
     }
 }
