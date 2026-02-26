@@ -58,11 +58,7 @@ class MainPanel: NSPanel {
             if columns.count > 1 {
                 let sep = NSView()
                 sep.wantsLayer = true
-                if #available(macOS 10.14, *) {
-                    sep.layer?.backgroundColor = NSColor.separatorColor.cgColor
-                } else {
-                    sep.layer?.backgroundColor = NSColor.gridColor.cgColor
-                }
+                sep.layer?.backgroundColor = WindowListView.separatorColor().cgColor
                 contentView.addSubview(sep)
                 columnSeparators.append(sep)
             }

@@ -2,6 +2,31 @@ import Cocoa
 
 class PanelTab {
     static func initTab() -> NSView {
+        // "Common" group (shared settings for both panel types)
+        let separatorAction: ActionClosure = { _ in
+            SidePanelManager.shared.applySeparatorSizes()
+        }
+
+        let lightColorWell = NSColorWell()
+        lightColorWell.color = NSColor(hex: Preferences.separatorColorLight)
+        lightColorWell.onAction = { sender in
+            let hex = (sender as! NSColorWell).color.hexString
+            Preferences.set("separatorColorLight", hex)
+            separatorAction(sender)
+        }
+
+        let darkColorWell = NSColorWell()
+        darkColorWell.color = NSColor(hex: Preferences.separatorColorDark)
+        darkColorWell.onAction = { sender in
+            let hex = (sender as! NSColorWell).color.hexString
+            Preferences.set("separatorColorDark", hex)
+            separatorAction(sender)
+        }
+
+        let commonTable = TableGroupView(title: "Common", width: SettingsWindow.contentWidth)
+        commonTable.addRow(leftText: "Separator color (light)", rightViews: [lightColorWell])
+        commonTable.addRow(leftText: "Separator color (dark)", rightViews: [darkColorWell])
+
         // "Side Panel" group
         let enableSwitch = LabelAndControl.makeSwitch("sidePanelEnabled", extraAction: { _ in
             if Preferences.sidePanelEnabled {
@@ -18,9 +43,6 @@ class PanelTab {
         }
         let sidePanelRebuildAction: ActionClosure = { _ in
             SidePanelManager.shared.rebuildPanelsForScreenChange()
-        }
-        let separatorAction: ActionClosure = { _ in
-            SidePanelManager.shared.applySeparatorSizes()
         }
         let opacitySlider = LabelAndControl.makeLabelWithSlider("", "sidePanelOpacity", 0, 100, 0, false, "%", width: 140, extraAction: opacityAction)
         let hoverSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelHoverOpacity", 0, 100, 0, false, "%", width: 140, extraAction: opacityAction)
@@ -71,6 +93,6 @@ class PanelTab {
         })
         windowTable.addRow(leftText: "Show tabs as indented items", rightViews: [windowTabSwitch])
 
-        return TableGroupSetView(originalViews: [sideTable, windowTable], bottomPadding: 0)
+        return TableGroupSetView(originalViews: [commonTable, sideTable, windowTable], bottomPadding: 0)
     }
 }
