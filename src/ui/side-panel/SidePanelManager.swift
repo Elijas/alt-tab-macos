@@ -98,13 +98,16 @@ class SidePanelManager {
 
     func openMainPanel() {
         if mainPanel == nil { mainPanel = MainPanel() }
-        mainPanel!.orderFront(nil)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        mainPanel!.makeKeyAndOrderFront(nil)
         refreshPanelsNow()
     }
 
     func closeMainPanel() {
         mainPanel?.orderOut(nil)
         mainPanel = nil
+        NSApp.setActivationPolicy(.accessory)
     }
 
     // MARK: - Refresh
@@ -137,7 +140,9 @@ class SidePanelManager {
     private func refreshPanelsNow() {
         Spaces.refresh()
 
-        let panelWindowNumbers = allWindowNumbers()
+        // Only exclude side panel overlays from the window list.
+        // MainPanel is a full-citizen window and should appear as a row.
+        let panelWindowNumbers = Set(panels.values.map { $0.windowNumber })
 
         // build cgWindowId → Window lookup for fast matching
         var windowByCgId = [CGWindowID: Window]()
