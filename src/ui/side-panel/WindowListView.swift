@@ -20,6 +20,7 @@ class WindowListView: NSView {
     private let wrapping: Bool
     private let minWidth: CGFloat
     var showTabHierarchy: Bool = false
+    var verticalFillEnabled: Bool = true
 
     init(separatorHeight: CGFloat = 7, fontSize: CGFloat = 12, wrapping: Bool = false, minWidth: CGFloat = 0) {
         self.separatorHeight = separatorHeight
@@ -72,7 +73,14 @@ class WindowListView: NSView {
         let effectiveRowHeight: CGFloat
         let useWrapping: Bool
         let contentHeight: CGFloat
-        if proportionalHeight >= rowHeight && windowRowCount > 0 {
+        if !verticalFillEnabled {
+            // fixed row heights, no vertical stretching; scrollbar when content overflows
+            // max() ensures content view fills the clip view so rows anchor to the top
+            effectiveRowHeight = rowHeight
+            useWrapping = wrapping
+            let naturalHeight = CGFloat(windowRowCount) * rowHeight + CGFloat(emptyRowCount) * compactRowHeight + separatorSpace
+            contentHeight = max(naturalHeight, bounds.height)
+        } else if proportionalHeight >= rowHeight && windowRowCount > 0 {
             // tier 1: proportional, rows fit at wrapping height
             effectiveRowHeight = proportionalHeight
             useWrapping = wrapping
