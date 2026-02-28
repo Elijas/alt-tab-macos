@@ -73,6 +73,22 @@ class SidePanelManager {
         panels.removeAll()
     }
 
+    func disableScreen(_ uuid: ScreenUuid) {
+        var disabled = Preferences.sidePanelDisabledScreens
+        let key = uuid as String
+        if !disabled.contains(key) { disabled.append(key) }
+        Preferences.set("sidePanelDisabledScreens", Preferences.jsonEncode(disabled))
+        panels[uuid]?.orderOut(nil)
+        panels.removeValue(forKey: uuid)
+    }
+
+    func enableScreen(_ uuid: ScreenUuid) {
+        var disabled = Preferences.sidePanelDisabledScreens
+        disabled.removeAll { $0 == uuid as String }
+        Preferences.set("sidePanelDisabledScreens", Preferences.jsonEncode(disabled))
+        rebuildPanelsForScreenChange()
+    }
+
     func rebuildPanelsForScreenChange() {
         // remove all existing panels
         for (_, panel) in panels {
@@ -82,9 +98,11 @@ class SidePanelManager {
 
         guard Preferences.sidePanelEnabled else { return }
 
-        // create one panel per screen
+        // create one panel per screen, skipping per-screen disabled screens
+        let disabledScreens = Set(Preferences.sidePanelDisabledScreens)
         for screen in NSScreen.screens {
             guard let uuid = screen.cachedUuid() else { continue }
+            guard !disabledScreens.contains(uuid as String) else { continue }
             let panel = SidePanel(for: screen)
             panels[uuid] = panel
             panel.orderFront(nil)
@@ -350,10 +368,10 @@ class SidePanelManager {
         }
     }
 
+    /// Window numbers for overlay panels only (SidePanels).
+    /// MainPanel is a full-citizen window and participates in Windows.list.
     func allWindowNumbers() -> Set<Int> {
-        var numbers = Set(panels.values.map { $0.windowNumber })
-        if let wp = mainPanel { numbers.insert(wp.windowNumber) }
-        return numbers
+        Set(panels.values.map { $0.windowNumber })
     }
 
     // MARK: - CGWindowList Audit
