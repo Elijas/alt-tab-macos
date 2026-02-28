@@ -82,11 +82,13 @@ class Preferences {
         "sidePanelFontSize": "12",
         "mainPanelFontSize": "12",
         "mainPanelTitleWrapping": "false",
+        "mainPanelVerticalFill": "true",
         "showTabHierarchyInMainPanel": "false",
         "showTabHierarchyInSidePanel": "false",
         "groupTabsInSortOrder": "true",
         "separatorColorLight": "999999",
         "separatorColorDark": "666666",
+        "sidePanelDisabledScreens": "[]",
         ]
         (0..<maxShortcutCount).forEach { index in
             values[indexToName("holdShortcut", index)] = "⌥"
@@ -153,11 +155,13 @@ class Preferences {
     static var sidePanelFontSize: Int { CachedUserDefaults.int("sidePanelFontSize") }
     static var mainPanelFontSize: Int { CachedUserDefaults.int("mainPanelFontSize") }
     static var mainPanelTitleWrapping: Bool { CachedUserDefaults.bool("mainPanelTitleWrapping") }
+    static var mainPanelVerticalFill: Bool { CachedUserDefaults.bool("mainPanelVerticalFill") }
     static var showTabHierarchyInMainPanel: Bool { CachedUserDefaults.bool("showTabHierarchyInMainPanel") }
     static var showTabHierarchyInSidePanel: Bool { CachedUserDefaults.bool("showTabHierarchyInSidePanel") }
     static var groupTabsInSortOrder: Bool { CachedUserDefaults.bool("groupTabsInSortOrder") }
     static var separatorColorLight: String { CachedUserDefaults.string("separatorColorLight") }
     static var separatorColorDark: String { CachedUserDefaults.string("separatorColorDark") }
+    static var sidePanelDisabledScreens: [String] { CachedUserDefaults.json("sidePanelDisabledScreens", [String].self) }
 
     // macro values
     static var appearanceStyle: AppearanceStylePreference { CachedUserDefaults.macroPref("appearanceStyle", AppearanceStylePreference.allCases) }
