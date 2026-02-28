@@ -30,6 +30,8 @@ class PanelTab {
         // "Side Panel" group
         let enableSwitch = LabelAndControl.makeSwitch("sidePanelEnabled", extraAction: { _ in
             if Preferences.sidePanelEnabled {
+                // clear per-screen disables so all panels come back
+                Preferences.set("sidePanelDisabledScreens", Preferences.jsonEncode([String]()))
                 SidePanelManager.shared.setup()
             } else {
                 SidePanelManager.shared.tearDown()
@@ -47,7 +49,7 @@ class PanelTab {
         let opacitySlider = LabelAndControl.makeLabelWithSlider("", "sidePanelOpacity", 0, 100, 0, false, "%", width: 140, extraAction: opacityAction)
         let hoverSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelHoverOpacity", 0, 100, 0, false, "%", width: 140, extraAction: opacityAction)
         let sideSepSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelSeparatorSize", 0, 20, 0, false, "px", width: 140, extraAction: separatorAction)
-        let sideFontSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelFontSize", 9, 20, 0, false, "pt", width: 140, extraAction: sidePanelRebuildAction)
+        let sideFontSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelFontSize", 9, 30, 0, false, "pt", width: 140, extraAction: sidePanelRebuildAction)
 
         let sideTable = TableGroupView(title: "Side Panel", width: SettingsWindow.contentWidth)
         sideTable.addRow(enable)
@@ -78,7 +80,7 @@ class PanelTab {
         }
         let openOnStartupSwitch = LabelAndControl.makeSwitch("mainPanelOpenOnStartup")
         let winSepSlider = LabelAndControl.makeLabelWithSlider("", "mainPanelSeparatorSize", 0, 20, 0, false, "px", width: 140, extraAction: separatorAction)
-        let winFontSlider = LabelAndControl.makeLabelWithSlider("", "mainPanelFontSize", 9, 20, 0, false, "pt", width: 140, extraAction: mainPanelRebuildAction)
+        let winFontSlider = LabelAndControl.makeLabelWithSlider("", "mainPanelFontSize", 9, 30, 0, false, "pt", width: 140, extraAction: mainPanelRebuildAction)
         let wrappingSwitch = LabelAndControl.makeSwitch("mainPanelTitleWrapping", extraAction: mainPanelRebuildAction)
 
         let windowTable = TableGroupView(title: "Main Panel", width: SettingsWindow.contentWidth)
@@ -87,6 +89,9 @@ class PanelTab {
         windowTable.addRow(leftText: "Space separator", rightViews: [winSepSlider[1], winSepSlider[2]])
         windowTable.addRow(leftText: "Font size", rightViews: [winFontSlider[1], winFontSlider[2]])
         windowTable.addRow(leftText: "Wrap titles", rightViews: [wrappingSwitch])
+
+        let verticalFillSwitch = LabelAndControl.makeSwitch("mainPanelVerticalFill", extraAction: mainPanelRebuildAction)
+        windowTable.addRow(leftText: "Stretch rows to fill space", rightViews: [verticalFillSwitch])
 
         let windowTabSwitch = LabelAndControl.makeSwitch("showTabHierarchyInMainPanel", extraAction: { _ in
             SidePanelManager.shared.refreshPanels()
