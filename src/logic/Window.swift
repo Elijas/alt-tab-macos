@@ -226,29 +226,36 @@ class Window {
                 if self.isTabChild,
                    let parentWindow = Windows.list.first(where: { $0.cgWindowId == self.parentWindowId }),
                    let parentCgId = parentWindow.cgWindowId {
-                    // Step 1: fully focus the parent window to trigger space switch.
-                    // All 3 calls use parent's cgWindowId — this is the same path as
-                    // clicking a non-indented window, proven to work cross-space.
-                    _SLPSSetFrontProcessWithOptions(&psn, parentCgId, SLPSMode.userGenerated.rawValue)
-                    parentWindow.makeKeyWindow(&psn)
-                    try? parentWindow.axUiElement?.focusWindow()
-                    // Poll until the parent's space becomes visible.
-                    // CGS APIs return stale data for ~400ms during transitions; max 2s.
                     let parentSpaceIds = Set(parentWindow.spaceIds)
-                    for _ in 0..<20 {
-                        Thread.sleep(forTimeInterval: 0.1)
-                        let visibleSpaces = (CGSCopyManagedDisplaySpaces(CGS_CONNECTION) as! [NSDictionary]).compactMap {
-                            ($0["Current Space"] as? NSDictionary)?["id64"] as? CGSSpaceID
-                        }
-                        if visibleSpaces.contains(where: { parentSpaceIds.contains($0) }) {
-                            break
+                    // Fresh CGS query to check if parent's space is already visible
+                    let currentVisibleSpaces = (CGSCopyManagedDisplaySpaces(CGS_CONNECTION) as! [NSDictionary]).compactMap {
+                        ($0["Current Space"] as? NSDictionary)?["id64"] as? CGSSpaceID
+                    }
+                    let needsSpaceSwitch = !currentVisibleSpaces.contains(where: { parentSpaceIds.contains($0) })
+                    // Always use parent's cgWindowId — tab has no space assignment
+                    _SLPSSetFrontProcessWithOptions(&psn, parentCgId, SLPSMode.userGenerated.rawValue)
+                    if needsSpaceSwitch {
+                        // Cross-space: fully focus parent to trigger space switch,
+                        // then poll until CGS reports the parent's space as visible.
+                        parentWindow.makeKeyWindow(&psn)
+                        try? parentWindow.axUiElement?.focusWindow()
+                        for i in 0..<40 {
+                            if i > 0 { Thread.sleep(forTimeInterval: 0.05) }
+                            let visibleSpaces = (CGSCopyManagedDisplaySpaces(CGS_CONNECTION) as! [NSDictionary]).compactMap {
+                                ($0["Current Space"] as? NSDictionary)?["id64"] as? CGSSpaceID
+                            }
+                            if visibleSpaces.contains(where: { parentSpaceIds.contains($0) }) {
+                                break
+                            }
                         }
                     }
-                    // Step 2: select the specific tab. No _SLPSSetFrontProcessWithOptions
-                    // here — the tab has no space assignment and that call would drag
-                    // the parent back. makeKeyWindow + AXRaise is sufficient to switch tabs.
+                    // Select the specific tab. makeKeyWindow sends raw WS events (fast).
+                    // AXRaise runs async — tab axUiElements are often stale, and the
+                    // synchronous 1s AX timeout was causing the perceived delay.
                     self.makeKeyWindow(&psn)
-                    try? self.axUiElement?.focusWindow()
+                    BackgroundWork.accessibilityCommandsQueue.addOperation { [weak self] in
+                        try? self?.axUiElement?.focusWindow()
+                    }
                 } else {
                     _SLPSSetFrontProcessWithOptions(&psn, self.cgWindowId!, SLPSMode.userGenerated.rawValue)
                     self.makeKeyWindow(&psn)
