@@ -27,7 +27,7 @@ class MainPanel: NSWindow {
         title = "Main Panel"
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
-        collectionBehavior = [.managed, .fullScreenAuxiliary]
+        collectionBehavior = [.managed, .fullScreenPrimary]
         if setFrameUsingName("MainPanel") {
             needsInitialSizing = false
         }
@@ -50,6 +50,7 @@ class MainPanel: NSWindow {
             contentView.addSubview(header)
 
             let listView = WindowListView(separatorHeight: CGFloat(Preferences.mainPanelSeparatorSize), fontSize: CGFloat(Preferences.mainPanelFontSize), wrapping: Preferences.mainPanelTitleWrapping)
+            listView.verticalFillEnabled = Preferences.mainPanelVerticalFill
             contentView.addSubview(listView)
 
             columns.append((header: header, listView: listView))

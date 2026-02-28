@@ -129,8 +129,8 @@ class SidePanel: NSPanel {
     }
 
     @objc private func turnOff() {
-        Preferences.set("sidePanelEnabled", "false")
-        SidePanelManager.shared.tearDown()
+        guard let uuid = targetScreen.cachedUuid() else { return }
+        SidePanelManager.shared.disableScreen(uuid)
     }
 
     @objc private func toggleLeftRight() {
