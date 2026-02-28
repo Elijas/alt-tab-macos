@@ -223,9 +223,37 @@ class Window {
                 guard let self else { return }
                 var psn = ProcessSerialNumber()
                 GetProcessForPID(self.application.pid, &psn)
-                _SLPSSetFrontProcessWithOptions(&psn, self.cgWindowId!, SLPSMode.userGenerated.rawValue)
-                self.makeKeyWindow(&psn)
-                try? self.axUiElement!.focusWindow()
+                if self.isTabChild,
+                   let parentWindow = Windows.list.first(where: { $0.cgWindowId == self.parentWindowId }),
+                   let parentCgId = parentWindow.cgWindowId {
+                    // Step 1: fully focus the parent window to trigger space switch.
+                    // All 3 calls use parent's cgWindowId — this is the same path as
+                    // clicking a non-indented window, proven to work cross-space.
+                    _SLPSSetFrontProcessWithOptions(&psn, parentCgId, SLPSMode.userGenerated.rawValue)
+                    parentWindow.makeKeyWindow(&psn)
+                    try? parentWindow.axUiElement?.focusWindow()
+                    // Poll until the parent's space becomes visible.
+                    // CGS APIs return stale data for ~400ms during transitions; max 2s.
+                    let parentSpaceIds = Set(parentWindow.spaceIds)
+                    for _ in 0..<20 {
+                        Thread.sleep(forTimeInterval: 0.1)
+                        let visibleSpaces = (CGSCopyManagedDisplaySpaces(CGS_CONNECTION) as! [NSDictionary]).compactMap {
+                            ($0["Current Space"] as? NSDictionary)?["id64"] as? CGSSpaceID
+                        }
+                        if visibleSpaces.contains(where: { parentSpaceIds.contains($0) }) {
+                            break
+                        }
+                    }
+                    // Step 2: select the specific tab. No _SLPSSetFrontProcessWithOptions
+                    // here — the tab has no space assignment and that call would drag
+                    // the parent back. makeKeyWindow + AXRaise is sufficient to switch tabs.
+                    self.makeKeyWindow(&psn)
+                    try? self.axUiElement?.focusWindow()
+                } else {
+                    _SLPSSetFrontProcessWithOptions(&psn, self.cgWindowId!, SLPSMode.userGenerated.rawValue)
+                    self.makeKeyWindow(&psn)
+                    try? self.axUiElement!.focusWindow()
+                }
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(50)) {
                     Windows.previewSelectedWindowIfNeeded()
                 }

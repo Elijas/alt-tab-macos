@@ -9,7 +9,7 @@ struct ScreenColumnData {
     let showTabHierarchy: Bool
 }
 
-class MainPanel: NSPanel {
+class MainPanel: NSWindow {
     private static let columnPadding: CGFloat = 8
     private static let headerHeight: CGFloat = 24
     private static let separatorWidth: CGFloat = 1
@@ -25,9 +25,9 @@ class MainPanel: NSPanel {
                    styleMask: [.titled, .closable, .miniaturizable, .resizable],
                    backing: .buffered, defer: false)
         title = "Main Panel"
-        level = .floating
         hidesOnDeactivate = false
         isReleasedWhenClosed = false
+        collectionBehavior = [.managed, .fullScreenAuxiliary]
         if setFrameUsingName("MainPanel") {
             needsInitialSizing = false
         }
@@ -196,5 +196,9 @@ class MainPanel: NSPanel {
 extension MainPanel: NSWindowDelegate {
     func windowDidResize(_ notification: Notification) {
         layoutColumns()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
     }
 }
