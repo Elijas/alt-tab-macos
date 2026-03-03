@@ -7,6 +7,8 @@ struct ScreenColumnData {
     let isActiveScreen: Bool
     let currentSpaceGroupIndex: Int?
     let showTabHierarchy: Bool
+    let spaceIndexes: [SpaceIndex]
+    let spaceIds: [CGSSpaceID]
 }
 
 class MainPanel: NSWindow {
@@ -76,7 +78,7 @@ class MainPanel: NSWindow {
         }
 
         // update content, determine which columns are empty
-        let canCollapse = screenData.count > 1
+        let canCollapse = screenData.count > 1 && Preferences.mainPanelCollapseEmptyScreens
         var maxContentHeight: CGFloat = 0
         columnHasWindows = []
         for (i, data) in screenData.enumerated() {
@@ -88,7 +90,9 @@ class MainPanel: NSWindow {
                 data.groups,
                 selectedWindowId: data.selectedWindowId,
                 isActiveScreen: data.isActiveScreen,
-                currentSpaceGroupIndex: data.currentSpaceGroupIndex
+                currentSpaceGroupIndex: data.currentSpaceGroupIndex,
+                spaceIndexes: data.spaceIndexes,
+                spaceIds: data.spaceIds
             )
             maxContentHeight = max(maxContentHeight, contentHeight)
 
@@ -146,7 +150,7 @@ class MainPanel: NSWindow {
         let bounds = contentView.bounds
 
         // Determine which columns collapse (empty monitors in multi-monitor setup)
-        let canCollapse = columns.count > 1
+        let canCollapse = columns.count > 1 && Preferences.mainPanelCollapseEmptyScreens
         var isCollapsed = [Bool]()
         for i in 0..<columns.count {
             let empty = columnHasWindows.indices.contains(i) ? !columnHasWindows[i] : false

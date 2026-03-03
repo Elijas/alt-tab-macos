@@ -145,7 +145,20 @@ class SidePanelRow: NSView {
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
+    func unhover() {
+        guard isHovered else { return }
+        isHovered = false
+        updateBackground()
+    }
+
     override func mouseEntered(with event: NSEvent) {
+        // Clear hover on sibling rows — NSTrackingArea doesn't reliably fire
+        // mouseExited during scroll, so multiple rows can get stuck highlighted.
+        if let container = superview {
+            for case let sibling as SidePanelRow in container.subviews where sibling !== self {
+                sibling.unhover()
+            }
+        }
         isHovered = true
         updateBackground()
     }

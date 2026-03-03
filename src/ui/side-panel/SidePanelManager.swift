@@ -24,6 +24,9 @@ class SidePanelManager {
         // force-discover windows on all spaces that AX events may have missed
         Applications.addMissingWindows()
         rebuildPanelsForScreenChange()
+        // Prune stale space labels keyed by CGSSpaceIDs from previous sessions
+        let currentSpaceIds = Set(Spaces.idsAndIndexes.map { $0.0 })
+        Preferences.pruneSpaceLabels(currentSpaceIds: currentSpaceIds)
         if Preferences.mainPanelOpenOnStartup {
             openMainPanel()
         }
@@ -212,7 +215,9 @@ class SidePanelManager {
                 selectedWindowId: wpResult.selectedWindowId,
                 isActiveScreen: wpResult.isActiveScreen,
                 currentSpaceGroupIndex: wpResult.currentSpaceGroupIndex,
-                showTabHierarchy: Preferences.showTabHierarchyInMainPanel
+                showTabHierarchy: Preferences.showTabHierarchyInMainPanel,
+                spaceIndexes: wpResult.spaceIndexes,
+                spaceIds: wpResult.spaceIds
             ))
         }
 
@@ -228,7 +233,7 @@ class SidePanelManager {
         showTabHierarchy: Bool,
         tabParentMap: [CGWindowID: CGWindowID],
         groupCreationKeys: [CGWindowID: Int]
-    ) -> (groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int?) {
+    ) -> (groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int?, spaceIndexes: [SpaceIndex], spaceIds: [CGSSpaceID]) {
         let screenSpaces = Spaces.screenSpacesMap[screenUuid] ?? []
 
         // sort spaces in fixed Mission Control order (space 1 on top)
@@ -329,7 +334,11 @@ class SidePanelManager {
         }
         let isActiveScreen = lowestFocusOrder == 0
 
-        return (groups: groups, selectedWindowId: selectedWindowId, isActiveScreen: isActiveScreen, currentSpaceGroupIndex: currentSpaceGroupIndex)
+        let spaceIndexes = sortedSpaces.map { spaceId in
+            Spaces.idsAndIndexes.first { $0.0 == spaceId }?.1 ?? 0
+        }
+
+        return (groups: groups, selectedWindowId: selectedWindowId, isActiveScreen: isActiveScreen, currentSpaceGroupIndex: currentSpaceGroupIndex, spaceIndexes: spaceIndexes, spaceIds: sortedSpaces)
     }
 
     // MARK: - Blacklist

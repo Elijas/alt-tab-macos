@@ -83,12 +83,14 @@ class Preferences {
         "mainPanelFontSize": "12",
         "mainPanelTitleWrapping": "false",
         "mainPanelVerticalFill": "true",
+        "mainPanelCollapseEmptyScreens": "true",
         "showTabHierarchyInMainPanel": "false",
         "showTabHierarchyInSidePanel": "false",
         "groupTabsInSortOrder": "true",
         "separatorColorLight": "999999",
         "separatorColorDark": "666666",
         "sidePanelDisabledScreens": "[]",
+        "spaceLabels": "{}",
         ]
         (0..<maxShortcutCount).forEach { index in
             values[indexToName("holdShortcut", index)] = "⌥"
@@ -156,12 +158,36 @@ class Preferences {
     static var mainPanelFontSize: Int { CachedUserDefaults.int("mainPanelFontSize") }
     static var mainPanelTitleWrapping: Bool { CachedUserDefaults.bool("mainPanelTitleWrapping") }
     static var mainPanelVerticalFill: Bool { CachedUserDefaults.bool("mainPanelVerticalFill") }
+    static var mainPanelCollapseEmptyScreens: Bool { CachedUserDefaults.bool("mainPanelCollapseEmptyScreens") }
     static var showTabHierarchyInMainPanel: Bool { CachedUserDefaults.bool("showTabHierarchyInMainPanel") }
     static var showTabHierarchyInSidePanel: Bool { CachedUserDefaults.bool("showTabHierarchyInSidePanel") }
     static var groupTabsInSortOrder: Bool { CachedUserDefaults.bool("groupTabsInSortOrder") }
     static var separatorColorLight: String { CachedUserDefaults.string("separatorColorLight") }
     static var separatorColorDark: String { CachedUserDefaults.string("separatorColorDark") }
     static var sidePanelDisabledScreens: [String] { CachedUserDefaults.json("sidePanelDisabledScreens", [String].self) }
+    static var spaceLabels: [String: String] { CachedUserDefaults.json("spaceLabels", [String: String].self) }
+
+    static func setSpaceLabel(_ spaceId: CGSSpaceID, _ label: String?) {
+        var labels = spaceLabels
+        if let label, !label.isEmpty {
+            labels[String(spaceId)] = label
+        } else {
+            labels.removeValue(forKey: String(spaceId))
+        }
+        set("spaceLabels", jsonEncode(labels))
+    }
+
+    static func spaceLabel(for spaceId: CGSSpaceID, displayIndex: SpaceIndex) -> String {
+        spaceLabels[String(spaceId)] ?? "Space \(displayIndex)"
+    }
+
+    static func pruneSpaceLabels(currentSpaceIds: Set<CGSSpaceID>) {
+        let labels = spaceLabels
+        let pruned = labels.filter { currentSpaceIds.contains(CGSSpaceID($0.key) ?? 0) }
+        if pruned.count != labels.count {
+            set("spaceLabels", jsonEncode(pruned))
+        }
+    }
 
     // macro values
     static var appearanceStyle: AppearanceStylePreference { CachedUserDefaults.macroPref("appearanceStyle", AppearanceStylePreference.allCases) }

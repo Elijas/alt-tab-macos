@@ -93,6 +93,11 @@ class PanelTab {
         let verticalFillSwitch = LabelAndControl.makeSwitch("mainPanelVerticalFill", extraAction: mainPanelRebuildAction)
         windowTable.addRow(leftText: "Stretch rows to fill space", rightViews: [verticalFillSwitch])
 
+        let collapseEmptySwitch = LabelAndControl.makeSwitch("mainPanelCollapseEmptyScreens", extraAction: { _ in
+            SidePanelManager.shared.refreshPanels()
+        })
+        windowTable.addRow(leftText: "Collapse empty screens", rightViews: [collapseEmptySwitch])
+
         let windowTabSwitch = LabelAndControl.makeSwitch("showTabHierarchyInMainPanel", extraAction: { _ in
             SidePanelManager.shared.refreshPanels()
         })
