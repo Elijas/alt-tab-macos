@@ -160,6 +160,10 @@ class CliServer {
             App.app.showUi(shortcutIndex)
             return noOutput
         }
+        if rawValue == "--open-main-panel" {
+            SidePanelManager.shared.openMainPanel()
+            return noOutput
+        }
         return error
     }
 
@@ -460,7 +464,7 @@ class CliClient {
     static func detectCommand() -> String? {
         let args = CommandLine.arguments
         if args.count == 2 && !args[1].starts(with: "--logs=") {
-            if args[1] == "--list" || args[1] == "--detailed-list" || args[1] == "--debug-tabs" || args[1].hasPrefix("--focus=") || args[1].hasPrefix("--focusUsingLastFocusOrder=") || args[1].hasPrefix("--show=") {
+            if args[1] == "--list" || args[1] == "--detailed-list" || args[1] == "--debug-tabs" || args[1] == "--open-main-panel" || args[1].hasPrefix("--focus=") || args[1].hasPrefix("--focusUsingLastFocusOrder=") || args[1].hasPrefix("--show=") {
                 return args[1]
             }
         }

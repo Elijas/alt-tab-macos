@@ -249,11 +249,15 @@ class WindowListView: NSView {
         if !spaceIndexes.isEmpty {
             var measuredHeaderIndex = 0
             for (gi, _) in groups.enumerated() {
-                let spIdx = spaceIndexes.indices.contains(gi) ? spaceIndexes[gi] : gi + 1
                 let spId: CGSSpaceID = spaceIds.indices.contains(gi) ? spaceIds[gi] : 0
-                let header = spaceHeaderPool[measuredHeaderIndex]
-                header.configure(spaceId: spId, displayIndex: spIdx, fontSize: fontSize)
-                headerHeights[measuredHeaderIndex] = header.desiredHeight(forWidth: width, baseHeight: headerHeight)
+                if Spaces.isFullscreenSpace(spId) {
+                    headerHeights[measuredHeaderIndex] = 0
+                } else {
+                    let spIdx = spaceIndexes.indices.contains(gi) ? spaceIndexes[gi] : gi + 1
+                    let header = spaceHeaderPool[measuredHeaderIndex]
+                    header.configure(spaceId: spId, displayIndex: spIdx, fontSize: fontSize)
+                    headerHeights[measuredHeaderIndex] = header.desiredHeight(forWidth: width, baseHeight: headerHeight)
+                }
                 measuredHeaderIndex += 1
             }
         }
@@ -270,12 +274,18 @@ class WindowListView: NSView {
         for (gi, group) in groups.enumerated() {
             // space header label (before each group's rows)
             if !spaceIndexes.isEmpty {
-                let header = spaceHeaderPool[headerIndex]
-                let hHeight = headerHeights[headerIndex]
-                yPos -= hHeight
-                header.frame = CGRect(x: 0, y: yPos, width: width, height: hHeight)
-                header.isHidden = false
-                layoutOrder.append(.spaceHeader(headerIndex))
+                let spId: CGSSpaceID = spaceIds.indices.contains(gi) ? spaceIds[gi] : 0
+                if Spaces.isFullscreenSpace(spId) {
+                    // fullscreen spaces: hide header, don't add to layout
+                    spaceHeaderPool[headerIndex].isHidden = true
+                } else {
+                    let header = spaceHeaderPool[headerIndex]
+                    let hHeight = headerHeights[headerIndex]
+                    yPos -= hHeight
+                    header.frame = CGRect(x: 0, y: yPos, width: width, height: hHeight)
+                    header.isHidden = false
+                    layoutOrder.append(.spaceHeader(headerIndex))
+                }
                 headerIndex += 1
             }
 
