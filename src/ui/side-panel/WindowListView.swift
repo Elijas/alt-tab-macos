@@ -250,7 +250,7 @@ class WindowListView: NSView {
             var measuredHeaderIndex = 0
             for (gi, _) in groups.enumerated() {
                 let spId: CGSSpaceID = spaceIds.indices.contains(gi) ? spaceIds[gi] : 0
-                if Spaces.isFullscreenSpace(spId) {
+                if Spaces.isFullscreenSpace(spId) || groups[gi].isEmpty {
                     headerHeights[measuredHeaderIndex] = 0
                 } else {
                     let spIdx = spaceIndexes.indices.contains(gi) ? spaceIndexes[gi] : gi + 1
@@ -275,8 +275,8 @@ class WindowListView: NSView {
             // space header label (before each group's rows)
             if !spaceIndexes.isEmpty {
                 let spId: CGSSpaceID = spaceIds.indices.contains(gi) ? spaceIds[gi] : 0
-                if Spaces.isFullscreenSpace(spId) {
-                    // fullscreen spaces: hide header, don't add to layout
+                if Spaces.isFullscreenSpace(spId) || group.isEmpty {
+                    // fullscreen/empty spaces: hide header, don't add to layout
                     spaceHeaderPool[headerIndex].isHidden = true
                 } else {
                     let header = spaceHeaderPool[headerIndex]
