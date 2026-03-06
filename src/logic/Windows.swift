@@ -180,6 +180,42 @@ class Windows {
                 result[wid] = parentWid
             }
         }
+
+        // Fullscreen fallback: when a fullscreen window has no AXTabGroup (AX hierarchy
+        // restructures in native fullscreen), find same-PID "orphan" windows with no space
+        // assignment — these are inactive tabs that CGS doesn't place on any space.
+        let alreadyMapped = Set(result.keys).union(parentWids)
+        // Index: PID → fullscreen visible windows (candidate parents)
+        var fullscreenParentsByPid = [pid_t: [Window]]()
+        for window in windows {
+            guard let wid = window.cgWindowId,
+                  !alreadyMapped.contains(wid),
+                  !parentWids.contains(wid),
+                  window.spaceIds.contains(where: { Spaces.isFullscreenSpace($0) }) else { continue }
+            fullscreenParentsByPid[window.application.pid, default: []].append(window)
+        }
+        if !fullscreenParentsByPid.isEmpty {
+            // Find orphan windows: same PID, not already mapped, no real space assignment
+            for window in windows {
+                guard let wid = window.cgWindowId,
+                      !alreadyMapped.contains(wid),
+                      !parentWids.contains(wid),
+                      result[wid] == nil,
+                      // Spaceless: only has the sentinel value or empty
+                      window.spaceIds.allSatisfy({ $0 == CGSSpaceID.max }),
+                      let candidates = fullscreenParentsByPid[window.application.pid],
+                      !candidates.isEmpty else { continue }
+                // Pick closest fullscreen parent by CGWindowID proximity — tabs in the same
+                // group get sequential IDs when created, so nearest ID = same tab group
+                let parent = candidates.min(by: {
+                    abs(Int($0.cgWindowId ?? 0) - Int(wid)) < abs(Int($1.cgWindowId ?? 0) - Int(wid))
+                })
+                if let parentWid = parent?.cgWindowId {
+                    result[wid] = parentWid
+                }
+            }
+        }
+
         return result
     }
 

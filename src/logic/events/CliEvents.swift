@@ -145,6 +145,9 @@ class CliServer {
         if rawValue == "--debug-tabs" {
             return debugTabs()
         }
+        if rawValue == "--panel-contents" {
+            return PanelContentsResponse(screens: SidePanelManager.shared.snapshotPanelContents())
+        }
         if rawValue.hasPrefix("--focus="),
            let id = CGWindowID(rawValue.dropFirst("--focus=".count)), let window = (Windows.list.first { $0.cgWindowId == id }) {
             window.focus()
@@ -231,28 +234,40 @@ class CliServer {
         var entries = [DebugTabEntry]()
 
         for window in Windows.list {
-            guard let wid = window.cgWindowId, let axElement = window.axUiElement else { continue }
+            guard let wid = window.cgWindowId else { continue }
+            let axElement = window.axUiElement
+
+            // Compute fullscreen: true if ANY of the window's spaces is a fullscreen space
+            let isFullscreen = window.spaceIds.contains(where: { Spaces.isFullscreenSpace($0) })
+            // Filter out the sentinel CGSSpaceID.max used for "unknown"
+            let spaceIds = window.spaceIds.filter { $0 != CGSSpaceID.max }
 
             var entry = DebugTabEntry(
                 id: wid,
                 title: window.title,
                 appName: window.application.localizedName,
                 pid: window.application.pid,
-                isTabbed: window.isTabbed
+                isTabbed: window.isTabbed,
+                isFullscreen: isFullscreen,
+                spaceIds: spaceIds.isEmpty ? nil : spaceIds,
+                hasAxElement: axElement != nil
             )
 
-            // Query role and subrole for every window
-            if let attrs = try? axElement.attributes([kAXRoleAttribute, kAXSubroleAttribute]) {
+            // Query role and subrole if AX element available
+            if let axElement = axElement,
+               let attrs = try? axElement.attributes([kAXRoleAttribute, kAXSubroleAttribute]) {
                 entry.axRole = attrs.role
                 entry.axSubrole = attrs.subrole
             }
 
-            if !window.isTabbed {
-                // --- VISIBLE window: walk children looking for AXTabGroup ---
-                entry = debugVisibleWindow(axElement, entry)
-            } else {
-                // --- TABBED window: explore AX attributes for linking signals ---
-                entry = debugTabbedWindow(axElement, entry)
+            if let axElement = axElement {
+                if !window.isTabbed {
+                    // --- VISIBLE window: walk children looking for AXTabGroup ---
+                    entry = debugVisibleWindow(axElement, entry)
+                } else {
+                    // --- TABBED window: explore AX attributes for linking signals ---
+                    entry = debugTabbedWindow(axElement, entry)
+                }
             }
 
             entries.append(entry)
@@ -268,6 +283,10 @@ class CliServer {
               let children = attrs.children else { return entry }
 
         entry.childCount = children.count
+        // Dump ALL children roles for diagnostics (especially useful for fullscreen windows)
+        entry.childRoles = children.compactMap { child in
+            (try? child.attributes([kAXRoleAttribute]))?.role
+        }
         var tabGroups = [DebugTabGroup]()
 
         for child in children {
@@ -413,6 +432,12 @@ class CliServer {
         }
     }
 
+    // MARK: - panel-contents JSON type
+
+    private struct PanelContentsResponse: Codable {
+        var screens: [SidePanelManager.PanelScreenSnapshot]
+    }
+
     // MARK: - debug-tabs JSON types
 
     private struct DebugTabsResponse: Codable {
@@ -425,9 +450,13 @@ class CliServer {
         var appName: String?
         var pid: Int32
         var isTabbed: Bool
+        var isFullscreen: Bool?
+        var spaceIds: [CGSSpaceID]?
+        var hasAxElement: Bool
         var axRole: String?
         var axSubrole: String?
         var childCount: Int?
+        var childRoles: [String]?
         var tabGroups: [DebugTabGroup]?
         // tabbed-window-only fields
         var axAttributeNames: [String]?
@@ -464,7 +493,7 @@ class CliClient {
     static func detectCommand() -> String? {
         let args = CommandLine.arguments
         if args.count == 2 && !args[1].starts(with: "--logs=") {
-            if args[1] == "--list" || args[1] == "--detailed-list" || args[1] == "--debug-tabs" || args[1] == "--open-main-panel" || args[1].hasPrefix("--focus=") || args[1].hasPrefix("--focusUsingLastFocusOrder=") || args[1].hasPrefix("--show=") {
+            if args[1] == "--list" || args[1] == "--detailed-list" || args[1] == "--debug-tabs" || args[1] == "--panel-contents" || args[1] == "--open-main-panel" || args[1].hasPrefix("--focus=") || args[1].hasPrefix("--focusUsingLastFocusOrder=") || args[1].hasPrefix("--show=") {
                 return args[1]
             }
         }
