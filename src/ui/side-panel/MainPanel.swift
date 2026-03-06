@@ -2,6 +2,7 @@ import Cocoa
 
 struct ScreenColumnData {
     let screenName: String
+    let screenId: String
     let groups: [[Window]]
     let selectedWindowId: CGWindowID?
     let isActiveScreen: Bool

@@ -159,6 +159,27 @@ class SidePanelManager {
     }
 
     private func refreshPanelsNow() {
+        let (allScreenData, sidePanelResults) = computeAllScreenData()
+
+        // Update side panels
+        for (screenUuid, result) in sidePanelResults {
+            if let panel = panels[screenUuid] {
+                panel.updateContents(result.groups, selectedWindowId: result.selectedWindowId, isActiveScreen: result.isActiveScreen, currentSpaceGroupIndex: result.currentSpaceGroupIndex, showTabHierarchy: Preferences.showTabHierarchyInSidePanel)
+            }
+        }
+
+        // Update main panel
+        if let wp = mainPanel, wp.isVisible {
+            wp.update(allScreenData)
+        }
+    }
+
+    /// Shared pipeline: compute grouped window data for all screens.
+    /// Used by both refreshPanelsNow() (to update views) and snapshotPanelContents() (for CLI).
+    private func computeAllScreenData() -> (
+        mainPanelData: [ScreenColumnData],
+        sidePanelResults: [(ScreenUuid, (groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int?, spaceIndexes: [SpaceIndex], spaceIds: [CGSSpaceID]))]
+    ) {
         Spaces.refresh()
 
         // Only exclude side panel overlays from the window list.
@@ -182,6 +203,7 @@ class SidePanelManager {
         }
 
         var allScreenData = [ScreenColumnData]()
+        var sidePanelResults = [(ScreenUuid, (groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int?, spaceIndexes: [SpaceIndex], spaceIds: [CGSSpaceID]))]()
 
         // sort screens left-to-right; ties broken top-to-bottom (higher Quartz Y = physically higher)
         let sortedScreens = NSScreen.screens.sorted { a, b in
@@ -194,13 +216,11 @@ class SidePanelManager {
         for screen in sortedScreens {
             guard let screenUuid = screen.cachedUuid() else { continue }
 
-            // feed matching side panel (uses side panel pref)
-            if let panel = panels[screenUuid] {
-                let result = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInSidePanel, tabParentMap: tabParentMap, groupCreationKeys: groupCreationKeys)
-                panel.updateContents(result.groups, selectedWindowId: result.selectedWindowId, isActiveScreen: result.isActiveScreen, currentSpaceGroupIndex: result.currentSpaceGroupIndex, showTabHierarchy: Preferences.showTabHierarchyInSidePanel)
-            }
+            // side panel data (uses side panel pref)
+            let sidePanelResult = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInSidePanel, tabParentMap: tabParentMap, groupCreationKeys: groupCreationKeys)
+            sidePanelResults.append((screenUuid, sidePanelResult))
 
-            // collect for main panel (uses main panel pref)
+            // main panel data (uses main panel pref)
             let screenName: String
             if #available(macOS 10.15, *) {
                 screenName = screen.localizedName
@@ -211,6 +231,7 @@ class SidePanelManager {
             let wpResult = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInMainPanel, tabParentMap: tabParentMap, groupCreationKeys: groupCreationKeys)
             allScreenData.append(ScreenColumnData(
                 screenName: screenName,
+                screenId: screenUuid as String,
                 groups: wpResult.groups,
                 selectedWindowId: wpResult.selectedWindowId,
                 isActiveScreen: wpResult.isActiveScreen,
@@ -221,9 +242,7 @@ class SidePanelManager {
             ))
         }
 
-        if let wp = mainPanel, wp.isVisible {
-            wp.update(allScreenData)
-        }
+        return (allScreenData, sidePanelResults)
     }
 
     private func buildScreenGroups(
@@ -343,51 +362,14 @@ class SidePanelManager {
 
     // MARK: - CLI: panel contents snapshot
 
-    /// Build the same grouped window data that both panels display, for CLI diagnostic output.
-    /// Replicates the logic of refreshPanelsNow() but returns serializable data instead of updating views.
+    /// Serialize the same grouped window data that both panels display, for CLI diagnostic output.
+    /// Calls computeAllScreenData() — the same pipeline as refreshPanelsNow().
     func snapshotPanelContents() -> [PanelScreenSnapshot] {
-        Spaces.refresh()
-
-        let panelWindowNumbers = Set(panels.values.map { $0.windowNumber })
-
-        var windowByCgId = [CGWindowID: Window]()
-        for window in Windows.list {
-            if let wid = window.cgWindowId { windowByCgId[wid] = window }
-        }
-
-        let needsTabInfo = Preferences.showTabHierarchyInSidePanel || Preferences.showTabHierarchyInMainPanel || Preferences.groupTabsInSortOrder
-        let tabParentMap: [CGWindowID: CGWindowID] = needsTabInfo ? Windows.queryAXTabGroups(Array(windowByCgId.values)) : [:]
-        let groupCreationKeys: [CGWindowID: Int]
-        if Preferences.groupTabsInSortOrder {
-            groupCreationKeys = Windows.groupSortKeys(Array(windowByCgId.values), tabParentMap: tabParentMap, keyPath: \.creationOrder)
-        } else {
-            groupCreationKeys = [:]
-        }
-
-        let sortedScreens = NSScreen.screens.sorted { a, b in
-            if a.frame.origin.x != b.frame.origin.x {
-                return a.frame.origin.x < b.frame.origin.x
-            }
-            return a.frame.origin.y > b.frame.origin.y
-        }
-
-        var snapshots = [PanelScreenSnapshot]()
-        for screen in sortedScreens {
-            guard let screenUuid = screen.cachedUuid() else { continue }
-            let screenName: String
-            if #available(macOS 10.15, *) {
-                screenName = screen.localizedName
-            } else {
-                let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 0
-                screenName = "Screen \(index)"
-            }
-            let result = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInSidePanel, tabParentMap: tabParentMap, groupCreationKeys: groupCreationKeys)
-
-            let spaceGroups = result.groups.enumerated().map { (groupIdx, windows) -> PanelSpaceGroup in
-                let spaceIndex = groupIdx < result.spaceIndexes.count ? result.spaceIndexes[groupIdx] : 0
-                let spaceId = groupIdx < result.spaceIds.count ? result.spaceIds[groupIdx] : 0
-                let isFullscreenSpace = Spaces.isFullscreenSpace(spaceId)
-                let isCurrentSpace = result.currentSpaceGroupIndex == groupIdx
+        let (allScreenData, _) = computeAllScreenData()
+        return allScreenData.map { data in
+            let spaceGroups = data.groups.enumerated().map { (groupIdx, windows) -> PanelSpaceGroup in
+                let spaceIndex = groupIdx < data.spaceIndexes.count ? data.spaceIndexes[groupIdx] : 0
+                let spaceId = groupIdx < data.spaceIds.count ? data.spaceIds[groupIdx] : 0
                 let windowEntries = windows.map { w -> PanelWindowEntry in
                     PanelWindowEntry(
                         windowId: w.cgWindowId,
@@ -398,25 +380,24 @@ class SidePanelManager {
                         isFullscreen: w.isFullscreen,
                         lastFocusOrder: w.lastFocusOrder,
                         creationOrder: w.creationOrder,
-                        isSelected: w.cgWindowId == result.selectedWindowId
+                        isSelected: w.cgWindowId == data.selectedWindowId
                     )
                 }
                 return PanelSpaceGroup(
                     spaceIndex: spaceIndex,
                     spaceId: spaceId,
-                    isFullscreenSpace: isFullscreenSpace,
-                    isCurrentSpace: isCurrentSpace,
+                    isFullscreenSpace: Spaces.isFullscreenSpace(spaceId),
+                    isCurrentSpace: data.currentSpaceGroupIndex == groupIdx,
                     windows: windowEntries
                 )
             }
-            snapshots.append(PanelScreenSnapshot(
-                screenName: screenName,
-                screenId: screenUuid as String,
-                isActiveScreen: result.isActiveScreen,
+            return PanelScreenSnapshot(
+                screenName: data.screenName,
+                screenId: data.screenId,
+                isActiveScreen: data.isActiveScreen,
                 spaces: spaceGroups
-            ))
+            )
         }
-        return snapshots
     }
 
     struct PanelScreenSnapshot: Codable {
