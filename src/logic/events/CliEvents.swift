@@ -151,11 +151,18 @@ class CliServer {
         if rawValue.hasPrefix("--focus="),
            let id = CGWindowID(rawValue.dropFirst("--focus=".count)), let window = (Windows.list.first { $0.cgWindowId == id }) {
             window.focus()
+            // Eagerly update lastFocusOrder so the next --detailed-list sees fresh state.
+            // Without this, rapid CLI cycles race against the async AX notification roundtrip
+            // and read stale focus order, causing consecutive presses to target the same window.
+            // Idempotent: when the AX event arrives later, updateLastFocusOrder short-circuits
+            // because lastFocusOrder is already 0.
+            _ = Windows.updateLastFocusOrder(window)
             return noOutput
         }
         if rawValue.hasPrefix("--focusUsingLastFocusOrder="),
            let lastFocusOrder = Int(rawValue.dropFirst("--focusUsingLastFocusOrder=".count)), let window = (Windows.list.first { $0.lastFocusOrder == lastFocusOrder }) {
             window.focus()
+            _ = Windows.updateLastFocusOrder(window)
             return noOutput
         }
         if rawValue.hasPrefix("--show="),
@@ -167,7 +174,104 @@ class CliServer {
             SidePanelManager.shared.openMainPanel()
             return noOutput
         }
+        if rawValue.hasPrefix("--cycle="),
+           let steps = Int(rawValue.dropFirst("--cycle=".count)), steps != 0 {
+            return enqueueCycle(steps)
+        }
         return error
+    }
+
+    // MARK: - Cycle with leading-edge batching
+    //
+    // State machine:
+    //   IDLE  + press → execute immediately, start 30ms batch window (BATCHING)
+    //   BATCHING + press → just accumulate (timer will drain)
+    //   Timer fires, pending > 0 → execute batch, restart timer (stay BATCHING)
+    //   Timer fires, pending == 0 → go IDLE
+    //
+    // First press in a burst has zero added latency. Rapid follow-ups batch into
+    // a single focus() call every 30ms, avoiding per-press process spawning overhead
+    // and visual jank from multiple rapid window raises.
+
+    private static var pendingCycleSteps = 0
+    private static var isBatchingCycles = false
+
+    private static func enqueueCycle(_ steps: Int) -> Codable {
+        pendingCycleSteps += steps
+        if !isBatchingCycles {
+            // First press in burst: execute immediately
+            let total = pendingCycleSteps
+            pendingCycleSteps = 0
+            executeCycle(total)
+            isBatchingCycles = true
+            scheduleCycleBatchDrain()
+        }
+        return noOutput
+    }
+
+    private static func scheduleCycleBatchDrain() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(30)) {
+            let remaining = pendingCycleSteps
+            pendingCycleSteps = 0
+            if remaining != 0 {
+                executeCycle(remaining)
+                scheduleCycleBatchDrain()
+            } else {
+                isBatchingCycles = false
+            }
+        }
+    }
+
+    /// Cycle windows on the mouse's screen by creation order.
+    /// Positive steps = forward (next), negative = backward (prev).
+    private static func executeCycle(_ steps: Int) {
+        // Refresh visible-space list so we filter correctly after a space switch (~1-5ms)
+        Spaces.refresh()
+
+        guard let mouseScreenId = NSScreen.withMouse()?.cachedUuid() else { return }
+        let visibleSpaceIds = Set(Spaces.visibleSpaces)
+
+        // Blacklist: user-configured hide entries + all AltTab builds
+        let blacklistPrefixes = Preferences.blacklist
+            .filter { $0.hide != .none }
+            .map { $0.bundleIdentifier }
+        let altTabPrefix = "com.lwouis.alt-tab-macos.at"
+
+        let candidates = Windows.list.filter { window in
+            guard !window.isWindowlessApp else { return false }
+            // Same screen, or focused window with stale nil screenId
+            let sameScreen = (window.screenId as String?) == (mouseScreenId as String)
+                || (window.screenId == nil && window.lastFocusOrder == 0)
+            guard sameScreen else { return false }
+            // On a currently visible space
+            guard window.spaceIds.contains(where: { visibleSpaceIds.contains($0) }) else { return false }
+            guard !window.isMinimized else { return false }
+            guard !window.isHidden else { return false }
+            // Not blacklisted
+            if let bundleId = window.application.bundleIdentifier {
+                if bundleId.hasPrefix(altTabPrefix) { return false }
+                for prefix in blacklistPrefixes {
+                    if bundleId.hasPrefix(prefix) { return false }
+                }
+            }
+            return true
+        }
+        .sorted { $0.creationOrder < $1.creationOrder }
+
+        let len = candidates.count
+        guard len >= 2 else { return }
+
+        // Current window = lowest lastFocusOrder (most recently focused)
+        let currentIdx = candidates.enumerated()
+            .min(by: { $0.element.lastFocusOrder < $1.element.lastFocusOrder })!
+            .offset
+
+        // Advance with wrap-around
+        let targetIdx = ((currentIdx + steps) % len + len) % len
+        let target = candidates[targetIdx]
+
+        target.focus()
+        _ = Windows.updateLastFocusOrder(target)
     }
 
     private struct JsonWindowList: Codable {
@@ -493,7 +597,7 @@ class CliClient {
     static func detectCommand() -> String? {
         let args = CommandLine.arguments
         if args.count == 2 && !args[1].starts(with: "--logs=") {
-            if args[1] == "--list" || args[1] == "--detailed-list" || args[1] == "--debug-tabs" || args[1] == "--panel-contents" || args[1] == "--open-main-panel" || args[1].hasPrefix("--focus=") || args[1].hasPrefix("--focusUsingLastFocusOrder=") || args[1].hasPrefix("--show=") {
+            if args[1] == "--list" || args[1] == "--detailed-list" || args[1] == "--debug-tabs" || args[1] == "--panel-contents" || args[1] == "--open-main-panel" || args[1].hasPrefix("--focus=") || args[1].hasPrefix("--focusUsingLastFocusOrder=") || args[1].hasPrefix("--show=") || args[1].hasPrefix("--cycle=") {
                 return args[1]
             }
         }
