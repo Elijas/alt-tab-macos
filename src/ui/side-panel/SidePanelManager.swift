@@ -35,12 +35,14 @@ class SidePanelManager {
         // Each pass re-scans and refreshes so progressively more windows appear.
         for delay in [1, 3, 5, 7, 10] {
             DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(delay)) { [weak self] in
+                Applications.removeZombieWindows()
                 self?.discoverMissingWindows()
                 self?.refreshPanels()
             }
         }
         // periodic re-discovery: AX events miss windows on other spaces
         discoveryTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+            Applications.removeZombieWindows()
             self?.discoverMissingWindows()
             self?.refreshPanels()
         }

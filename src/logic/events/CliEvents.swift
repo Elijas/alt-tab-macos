@@ -51,6 +51,7 @@ class CliServer {
             )
         }
         if rawValue == "--detailed-list" {
+            Applications.removeZombieWindows()
             // refresh space/screen assignments so CLI returns fresh data
             Spaces.refresh()
             let spaceIdsAndIndexes = Spaces.idsAndIndexes.map { $0.0 }
