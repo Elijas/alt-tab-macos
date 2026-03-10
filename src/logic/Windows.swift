@@ -205,9 +205,28 @@ class Windows {
                       window.spaceIds.allSatisfy({ $0 == CGSSpaceID.max }),
                       let candidates = fullscreenParentsByPid[window.application.pid],
                       !candidates.isEmpty else { continue }
-                // Pick closest fullscreen parent by CGWindowID proximity — tabs in the same
-                // group get sequential IDs when created, so nearest ID = same tab group
-                let parent = candidates.min(by: {
+                // Match by bounds proximity: native tabs share screen position and width;
+                // height differs by at most the tab bar (~40px). This prevents matching
+                // a spaceless window on screen A to a fullscreen parent on screen B
+                // (the old CGWindowID proximity heuristic got this wrong when windows
+                // were created close in time but later moved to different screens).
+                let boundsMatched: [Window]
+                if let pos = window.position, let sz = window.size {
+                    boundsMatched = candidates.filter { candidate in
+                        guard let cPos = candidate.position, let cSz = candidate.size else { return false }
+                        return abs(pos.x - cPos.x) < 10
+                            && abs(sz.width - cSz.width) < 10
+                            && abs(pos.y - cPos.y) < 80
+                            && abs(sz.height - cSz.height) < 80
+                    }
+                } else {
+                    // No bounds available — can't verify screen match; skip to avoid false positives
+                    boundsMatched = []
+                }
+                guard !boundsMatched.isEmpty else { continue }
+                // Tiebreaker among bounds-matched candidates: CGWindowID proximity
+                // (tabs created together get sequential IDs)
+                let parent = boundsMatched.min(by: {
                     abs(Int($0.cgWindowId ?? 0) - Int(wid)) < abs(Int($1.cgWindowId ?? 0) - Int(wid))
                 })
                 if let parentWid = parent?.cgWindowId {
