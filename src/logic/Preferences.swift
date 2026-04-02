@@ -3,98 +3,76 @@ import Carbon.HIToolbox.Events
 import ShortcutRecorder
 
 class Preferences {
-    // default values
-    static var defaultValues: [String: String] = {
-        var values: [String: String] = [
-        "shortcutCount": "2",
-        "holdShortcut": "⌥",
-        "holdShortcut2": "⌥",
-        "nextWindowShortcut": "⇥",
-        "nextWindowShortcut2": keyAboveTabDependingOnInputSource(),
-        "nextWindowGesture": GesturePreference.disabled.indexAsString,
-        "focusWindowShortcut": returnKeyEquivalent(),
-        "previousWindowShortcut": "⇧",
-        "cancelShortcut": "⎋",
-        "lockSearchShortcut": "Space",
-        "closeWindowShortcut": "W",
-        "minDeminWindowShortcut": "M",
-        "toggleFullscreenWindowShortcut": "F",
-        "quitAppShortcut": "Q",
-        "hideShowAppShortcut": "H",
-        "searchShortcut": "S",
-        "arrowKeysEnabled": "true",
-        "vimKeysEnabled": "false",
-        "mouseHoverEnabled": "false",
-        "cursorFollowFocus": CursorFollowFocus.never.indexAsString,
-        "showMinimizedWindows": ShowHowPreference.show.indexAsString,
-        "showMinimizedWindows2": ShowHowPreference.show.indexAsString,
-        "showHiddenWindows": ShowHowPreference.show.indexAsString,
-        "showHiddenWindows2": ShowHowPreference.show.indexAsString,
-        "showFullscreenWindows": ShowHowPreference.show.indexAsString,
-        "showFullscreenWindows2": ShowHowPreference.show.indexAsString,
-        "showWindowlessApps": ShowHowPreference.showAtTheEnd.indexAsString,
-        "showWindowlessApps2": ShowHowPreference.showAtTheEnd.indexAsString,
-        "windowOrder": WindowOrderPreference.recentlyFocused.indexAsString,
-        "windowOrder2": WindowOrderPreference.recentlyFocused.indexAsString,
-        "showTabsAsWindows": "false",
-        "hideColoredCircles": "false",
-        "windowDisplayDelay": "100",
-        "appearanceStyle": AppearanceStylePreference.thumbnails.indexAsString,
-        "appearanceSize": AppearanceSizePreference.auto.indexAsString,
-        "appearanceTheme": AppearanceThemePreference.system.indexAsString,
-        "theme": ThemePreference.macOs.indexAsString,
-        "showOnScreen": ShowOnScreenPreference.active.indexAsString,
-        "titleTruncation": TitleTruncationPreference.end.indexAsString,
-        "alignThumbnails": AlignThumbnailsPreference.center.indexAsString,
-        "showAppsOrWindows": ShowAppsOrWindowsPreference.windows.indexAsString,
-        "showTitles": ShowTitlesPreference.windowTitle.indexAsString,
-        "appsToShow": AppsToShowPreference.all.indexAsString,
-        "appsToShow2": AppsToShowPreference.active.indexAsString,
-        "spacesToShow": SpacesToShowPreference.all.indexAsString,
-        "spacesToShow2": SpacesToShowPreference.all.indexAsString,
-        "screensToShow": ScreensToShowPreference.all.indexAsString,
-        "screensToShow2": ScreensToShowPreference.all.indexAsString,
-        "fadeOutAnimation": "false",
-        "previewFadeInAnimation": "true",
-        "hideSpaceNumberLabels": "false",
-        "hideStatusIcons": "false",
-        "startAtLogin": "true",
-        "menubarIcon": MenubarIconPreference.outlined.indexAsString,
-        "menubarIconShown": "true",
-        "language": LanguagePreference.systemDefault.indexAsString,
-        "blacklist": defaultBlacklist(),
-        "updatePolicy": UpdatePolicyPreference.autoCheck.indexAsString,
-        "crashPolicy": CrashPolicyPreference.ask.indexAsString,
-        "shortcutStyle": ShortcutStylePreference.focusOnRelease.indexAsString,
-        "shortcutStyle2": ShortcutStylePreference.focusOnRelease.indexAsString,
-        "hideAppBadges": "false",
-        "hideThumbnails": "false",
-        "previewFocusedWindow": "false",
-        "screenRecordingPermissionSkipped": "false",
-        "trackpadHapticFeedbackEnabled": "true",
-        "settingsWindowShownOnFirstLaunch": "false",
-        "sidePanelEnabled": "true",
-        "sidePanelOpacity": "87",
-        "sidePanelHoverOpacity": "100",
-        "mainPanelOpenOnStartup": "false",
-        "sidePanelSeparatorSize": "3",
-        "mainPanelSeparatorSize": "7",
-        "sidePanelFontSize": "12",
-        "mainPanelFontSize": "12",
-        "mainPanelTitleWrapping": "false",
-        "mainPanelVerticalFill": "true",
-        "mainPanelCollapseEmptyScreens": "true",
-        "showTabHierarchyInMainPanel": "false",
-        "showTabHierarchyInSidePanel": "false",
-        "groupTabsInSortOrder": "true",
-        "separatorColorLight": "999999",
-        "separatorColorDark": "666666",
-        "sidePanelDisabledScreens": "[]",
-        "spaceLabels": "{}",
+    static var defaultValues: [String: Any] = {
+        var values: [String: Any] = [
+            "shortcutCount": "2",
+            "nextWindowGesture": GesturePreference.disabled.indexAsString,
+            "focusWindowShortcut": defaultShortcut(returnKeyEquivalent()),
+            "previousWindowShortcut": defaultShortcut("⇧"),
+            "cancelShortcut": defaultShortcut("⎋"),
+            "lockSearchShortcut": defaultShortcut("Space"),
+            "closeWindowShortcut": defaultShortcut("W"),
+            "minDeminWindowShortcut": defaultShortcut("M"),
+            "toggleFullscreenWindowShortcut": defaultShortcut("F"),
+            "quitAppShortcut": defaultShortcut("Q"),
+            "hideShowAppShortcut": defaultShortcut("H"),
+            "searchShortcut": defaultShortcut("S"),
+            "arrowKeysEnabled": "true",
+            "vimKeysEnabled": "false",
+            "mouseHoverEnabled": "false",
+            "cursorFollowFocus": CursorFollowFocus.never.indexAsString,
+            "showTabsAsWindows": "false",
+            "hideColoredCircles": "false",
+            "windowDisplayDelay": "100",
+            "appearanceStyle": AppearanceStylePreference.thumbnails.indexAsString,
+            "appearanceSize": AppearanceSizePreference.auto.indexAsString,
+            "appearanceTheme": AppearanceThemePreference.system.indexAsString,
+            "theme": ThemePreference.macOs.indexAsString,
+            "showOnScreen": ShowOnScreenPreference.active.indexAsString,
+            "titleTruncation": TitleTruncationPreference.end.indexAsString,
+            "alignThumbnails": AlignThumbnailsPreference.center.indexAsString,
+            "showAppsOrWindows": ShowAppsOrWindowsPreference.windows.indexAsString,
+            "showTitles": ShowTitlesPreference.windowTitle.indexAsString,
+            "fadeOutAnimation": "false",
+            "previewFadeInAnimation": "true",
+            "startAtLogin": "true",
+            "menubarIcon": MenubarIconPreference.outlined.indexAsString,
+            "menubarIconShown": "true",
+            "language": LanguagePreference.systemDefault.indexAsString,
+            "exceptions": defaultExceptions(),
+            "updatePolicy": UpdatePolicyPreference.autoCheck.indexAsString,
+            "crashPolicy": CrashPolicyPreference.ask.indexAsString,
+            "hideAppBadges": "false",
+            "hideThumbnails": "false",
+            "hideSpaceNumberLabels": "false",
+            "hideStatusIcons": "false",
+            "previewFocusedWindow": "false",
+            "captureWindowsInBackground": "true",
+            "screenRecordingPermissionSkipped": "false",
+            "trackpadHapticFeedbackEnabled": "true",
+            "settingsWindowShownOnFirstLaunch": "false",
+            "sidePanelEnabled": "true",
+            "sidePanelOpacity": "87",
+            "sidePanelHoverOpacity": "100",
+            "mainPanelOpenOnStartup": "false",
+            "sidePanelSeparatorSize": "3",
+            "mainPanelSeparatorSize": "7",
+            "sidePanelFontSize": "12",
+            "mainPanelFontSize": "12",
+            "mainPanelTitleWrapping": "false",
+            "mainPanelVerticalFill": "true",
+            "mainPanelCollapseEmptyScreens": "true",
+            "showTabHierarchyInMainPanel": "false",
+            "showTabHierarchyInSidePanel": "false",
+            "groupTabsInSortOrder": "true",
+            "separatorColorLight": "999999",
+            "separatorColorDark": "666666",
+            "sidePanelDisabledScreens": "[]",
+            "spaceLabels": "{}",
         ]
         (0..<maxShortcutCount).forEach { index in
-            values[indexToName("holdShortcut", index)] = "⌥"
-            values[indexToName("nextWindowShortcut", index)] = index == 0 ? "⇥" : (index == 1 ? keyAboveTabDependingOnInputSource() : "")
+            values[indexToName("holdShortcut", index)] = defaultShortcut("⌥")
+            values[indexToName("nextWindowShortcut", index)] = defaultShortcut(index == 0 ? "⇥" : (index == 1 ? keyAboveTabDependingOnInputSource() : ""))
         }
         (0...maxShortcutCount).forEach { index in
             values[indexToName("appsToShow", index)] = index == 1 ? AppsToShowPreference.active.indexAsString : (index == 2 ? AppsToShowPreference.nonActive.indexAsString : AppsToShowPreference.all.indexAsString)
@@ -112,21 +90,31 @@ class Preferences {
 
     // system preferences
     static var finderShowsQuitMenuItem: Bool { UserDefaults(suiteName: "com.apple.Finder")?.bool(forKey: "QuitMenuItem") ?? false }
+    static let staticShortcutKeys = [
+        "focusWindowShortcut", "previousWindowShortcut", "cancelShortcut", "lockSearchShortcut", "closeWindowShortcut",
+        "minDeminWindowShortcut", "toggleFullscreenWindowShortcut", "quitAppShortcut", "hideShowAppShortcut", "searchShortcut",
+    ]
+    static var allShortcutPreferenceKeys: [String] {
+        staticShortcutKeys + (0..<maxShortcutCount).flatMap { [indexToName("holdShortcut", $0), indexToName("nextWindowShortcut", $0)] }
+    }
+    static let emptyShortcut = Shortcut(code: .none, modifierFlags: [], characters: nil, charactersIgnoringModifiers: nil)
+    private static let shortcutStorageStringField = "string"
+    private static let shortcutStorageDataField = "secureData"
 
     // persisted values
-    static var holdShortcut: [String] { (0..<shortcutCount).map { CachedUserDefaults.string(indexToName("holdShortcut", $0)) } }
-    static var nextWindowShortcut: [String] { (0..<shortcutCount).map { CachedUserDefaults.string(indexToName("nextWindowShortcut", $0)) } }
+    static var holdShortcut: [Shortcut?] { (0..<shortcutCount).map { CachedUserDefaults.shortcut(indexToName("holdShortcut", $0)) } }
+    static var nextWindowShortcut: [Shortcut?] { (0..<shortcutCount).map { CachedUserDefaults.shortcut(indexToName("nextWindowShortcut", $0)) } }
     static var nextWindowGesture: GesturePreference { CachedUserDefaults.macroPref("nextWindowGesture", GesturePreference.allCases) }
-    static var focusWindowShortcut: String { CachedUserDefaults.string("focusWindowShortcut") }
-    static var previousWindowShortcut: String { CachedUserDefaults.string("previousWindowShortcut") }
-    static var cancelShortcut: String { CachedUserDefaults.string("cancelShortcut") }
-    static var lockSearchShortcut: String { CachedUserDefaults.string("lockSearchShortcut") }
-    static var closeWindowShortcut: String { CachedUserDefaults.string("closeWindowShortcut") }
-    static var minDeminWindowShortcut: String { CachedUserDefaults.string("minDeminWindowShortcut") }
-    static var toggleFullscreenWindowShortcut: String { CachedUserDefaults.string("toggleFullscreenWindowShortcut") }
-    static var quitAppShortcut: String { CachedUserDefaults.string("quitAppShortcut") }
-    static var hideShowAppShortcut: String { CachedUserDefaults.string("hideShowAppShortcut") }
-    static var searchShortcut: String { CachedUserDefaults.string("searchShortcut") }
+    static var focusWindowShortcut: Shortcut? { CachedUserDefaults.shortcut("focusWindowShortcut") }
+    static var previousWindowShortcut: Shortcut? { CachedUserDefaults.shortcut("previousWindowShortcut") }
+    static var cancelShortcut: Shortcut? { CachedUserDefaults.shortcut("cancelShortcut") }
+    static var lockSearchShortcut: Shortcut? { CachedUserDefaults.shortcut("lockSearchShortcut") }
+    static var closeWindowShortcut: Shortcut? { CachedUserDefaults.shortcut("closeWindowShortcut") }
+    static var minDeminWindowShortcut: Shortcut? { CachedUserDefaults.shortcut("minDeminWindowShortcut") }
+    static var toggleFullscreenWindowShortcut: Shortcut? { CachedUserDefaults.shortcut("toggleFullscreenWindowShortcut") }
+    static var quitAppShortcut: Shortcut? { CachedUserDefaults.shortcut("quitAppShortcut") }
+    static var hideShowAppShortcut: Shortcut? { CachedUserDefaults.shortcut("hideShowAppShortcut") }
+    static var searchShortcut: Shortcut? { CachedUserDefaults.shortcut("searchShortcut") }
     // periphery:ignore
     static var arrowKeysEnabled: Bool { CachedUserDefaults.bool("arrowKeysEnabled") }
     // periphery:ignore
@@ -144,8 +132,9 @@ class Preferences {
     static var hideAppBadges: Bool { CachedUserDefaults.bool("hideAppBadges") }
     // periphery:ignore
     static var startAtLogin: Bool { CachedUserDefaults.bool("startAtLogin") }
-    static var blacklist: [BlacklistEntry] { CachedUserDefaults.json("blacklist", [BlacklistEntry].self) }
+    static var exceptions: [ExceptionEntry] { CachedUserDefaults.json("exceptions", [ExceptionEntry].self) }
     static var previewSelectedWindow: Bool { CachedUserDefaults.bool("previewFocusedWindow") }
+    static var captureWindowsInBackground: Bool { CachedUserDefaults.bool("captureWindowsInBackground") }
     static var screenRecordingPermissionSkipped: Bool { CachedUserDefaults.bool("screenRecordingPermissionSkipped") }
     static var settingsWindowShownOnFirstLaunch: Bool { CachedUserDefaults.bool("settingsWindowShownOnFirstLaunch") }
     static var sidePanelEnabled: Bool { CachedUserDefaults.bool("sidePanelEnabled") }
@@ -241,8 +230,32 @@ class Preferences {
         set("settingsWindowShownOnFirstLaunch", "true", false)
     }
 
+    static func defaultShortcut(_ keyEquivalent: String) -> [String: Any] {
+        shortcutStorage(shortcutFromKeyEquivalent(keyEquivalent), keyEquivalent)
+    }
+
+    static func setShortcut(_ key: String, _ shortcut: Shortcut?, _ notify: Bool = true) {
+        setShortcut(key, shortcut, stringRepresentation: nil, notify)
+    }
+
+    static func setShortcut(_ key: String, _ shortcut: Shortcut?, stringRepresentation: String?, _ notify: Bool = true) {
+        UserDefaults.standard.set(shortcutStorage(shortcut, stringRepresentation), forKey: key)
+        CachedUserDefaults.removeFromCache(key)
+        if notify {
+            PreferencesEvents.preferenceChanged(key)
+        }
+    }
+
+    static func setShortcut(_ key: String, keyEquivalent: String, _ notify: Bool = true) {
+        setShortcut(key, shortcutFromKeyEquivalent(keyEquivalent), stringRepresentation: keyEquivalent, notify)
+    }
+
+    static func shortcut(_ key: String) -> Shortcut? {
+        CachedUserDefaults.shortcut(key)
+    }
+
     static func set<T>(_ key: String, _ value: T, _ notify: Bool = true) where T: Encodable {
-        UserDefaults.standard.set(key == "blacklist" ? jsonEncode(value) : value, forKey: key)
+        UserDefaults.standard.set(key == "exceptions" ? jsonEncode(value) : value, forKey: key)
         CachedUserDefaults.removeFromCache(key)
         if notify {
             PreferencesEvents.preferenceChanged(key)
@@ -272,10 +285,10 @@ class Preferences {
         return LiteralKeyCodeTransformer.shared.transformedValue(NSNumber(value: kVK_Return)) ?? "↩"
     }
 
-    static func defaultBlacklist() -> String {
+    static func defaultExceptions() -> String {
         return jsonEncode([
-            BlacklistEntry(bundleIdentifier: "com.McAfee.McAfeeSafariHost", hide: .always, ignore: .none),
-            BlacklistEntry(bundleIdentifier: "com.apple.finder", hide: .whenNoOpenWindow, ignore: .none),
+            ExceptionEntry(bundleIdentifier: "com.McAfee.McAfeeSafariHost", hide: .always, ignore: .none),
+            ExceptionEntry(bundleIdentifier: "com.apple.finder", hide: .whenNoOpenWindow, ignore: .none),
         ] + [
             "com.microsoft.rdc.macos",
             "com.teamviewer.TeamViewer",
@@ -288,12 +301,46 @@ class Preferences {
             "com.apple.ScreenSharing",
             "com.utmapp.UTM",
         ].map {
-            BlacklistEntry(bundleIdentifier: $0, hide: .none, ignore: .whenFullscreen)
+            ExceptionEntry(bundleIdentifier: $0, hide: .none, ignore: .whenFullscreen)
         })
     }
 
     static func jsonEncode<T>(_ value: T) -> String where T: Encodable {
         return String(data: try! JSONEncoder().encode(value), encoding: .utf8)!
+    }
+
+    static func archiveShortcut(_ shortcut: Shortcut?) -> Data {
+        if #available(macOS 10.13, *) {
+            return try! NSKeyedArchiver.archivedData(withRootObject: shortcut ?? emptyShortcut, requiringSecureCoding: true)
+        }
+        return NSKeyedArchiver.archivedData(withRootObject: shortcut ?? emptyShortcut)
+    }
+
+    static func shortcutStorage(_ shortcut: Shortcut?, _ stringRepresentation: String?) -> [String: Any] {
+        [
+            shortcutStorageStringField: stringRepresentation ?? shortcut?.readableStringRepresentation(isASCII: true) ?? "",
+            shortcutStorageDataField: archiveShortcut(shortcut),
+        ]
+    }
+
+    static func decodeShortcutStorage(_ value: Any) -> (Bool, Shortcut?) {
+        guard let storage = value as? [String: Any], let data = storage[shortcutStorageDataField] as? Data else { return (false, nil) }
+        return unarchiveShortcut(data)
+    }
+
+    static func unarchiveShortcut(_ data: Data) -> (Bool, Shortcut?) {
+        let shortcut: Shortcut?
+        if #available(macOS 10.13, *) {
+            shortcut = try? NSKeyedUnarchiver.unarchivedObject(ofClass: Shortcut.self, from: data)
+        } else {
+            shortcut = NSKeyedUnarchiver.unarchiveObject(with: data) as? Shortcut
+        }
+        guard let shortcut else { return (false, nil) }
+        return (true, shortcut.keyCode == .none && shortcut.modifierFlags == [] ? nil : shortcut)
+    }
+
+    static func shortcutFromKeyEquivalent(_ keyEquivalent: String) -> Shortcut? {
+        keyEquivalent.isEmpty ? nil : Shortcut(keyEquivalent: keyEquivalent)
     }
 
     static func indexToName(_ baseName: String, _ index: Int) -> String {
@@ -308,7 +355,7 @@ class Preferences {
 }
 
 class CachedUserDefaults {
-    static var cache = AXUIElement.ConcurrentMap<String, Any>()
+    static var cache = ConcurrentMap<String, Any>()
 
     static func removeFromCache(_ key: String) {
         cache.withLock { $0.removeValue(forKey: key) }
@@ -333,6 +380,23 @@ class CachedUserDefaults {
         let finalValue = UserDefaults.standard.string(forKey: key)!
         cache.withLock { $0[key] = finalValue }
         return finalValue
+    }
+
+    static func shortcut(_ key: String) -> Shortcut? {
+        if let cachedFinalValue = cache.withLock({ $0[key] }) {
+            return cachedFinalValue as? Shortcut
+        }
+        guard let objectValue = UserDefaults.standard.object(forKey: key) else {
+            cache.withLock { $0[key] = NSNull() }
+            return nil
+        }
+        let (isValid, finalValue) = Preferences.decodeShortcutStorage(objectValue)
+        if isValid {
+            cache.withLock { $0[key] = finalValue ?? NSNull() }
+            return finalValue
+        }
+        UserDefaults.standard.removeObject(forKey: key)
+        return shortcut(key)
     }
 
     static func int(_ key: String) -> Int {
@@ -383,9 +447,9 @@ class CachedUserDefaults {
     }
 }
 
-struct BlacklistEntry: Codable {
+struct ExceptionEntry: Codable {
     var bundleIdentifier: String
-    var hide: BlacklistHidePreference
-    var ignore: BlacklistIgnorePreference
+    var hide: ExceptionHidePreference
+    var ignore: ExceptionIgnorePreference
     var windowTitleContains: String?
 }

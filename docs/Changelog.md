@@ -1,3 +1,114 @@
+# [10.9.0](https://github.com/lwouis/alt-tab-macos/compare/v10.8.0...v10.9.0) (2026-03-22)
+
+
+### Bug Fixes
+
+* panel may re-center when searching ([a1f8b18](https://github.com/lwouis/alt-tab-macos/commit/a1f8b18))
+
+
+### Features
+
+* new setting to not capture windows in background (closes [#5337](https://github.com/lwouis/alt-tab-macos/issues/5337)) ([5ed6c1d](https://github.com/lwouis/alt-tab-macos/commit/5ed6c1d)), closes [#5371](https://github.com/lwouis/alt-tab-macos/issues/5371)
+* show better ui when there are no window (closes [#283](https://github.com/lwouis/alt-tab-macos/issues/283)) ([9f3e20a](https://github.com/lwouis/alt-tab-macos/commit/9f3e20a))
+* update fr/en localizations ([630527e](https://github.com/lwouis/alt-tab-macos/commit/630527e))
+
+# [10.8.0](https://github.com/lwouis/alt-tab-macos/compare/v10.7.0...v10.8.0) (2026-03-20)
+
+
+### Bug Fixes
+
+* allow quitting multiple apps in a row (follow-up on [#5421](https://github.com/lwouis/alt-tab-macos/issues/5421)) ([56c1927](https://github.com/lwouis/alt-tab-macos/commit/56c1927))
+* apps with no open window might not show up (closes [#5424](https://github.com/lwouis/alt-tab-macos/issues/5424)) ([8962ad1](https://github.com/lwouis/alt-tab-macos/commit/8962ad1))
+* avoid repeating shortcut that was released (closes [#5429](https://github.com/lwouis/alt-tab-macos/issues/5429)) ([3b1c7c7](https://github.com/lwouis/alt-tab-macos/commit/3b1c7c7))
+* switcher might show empty on rare occasions (closes [#5432](https://github.com/lwouis/alt-tab-macos/issues/5432)) ([6105bb3](https://github.com/lwouis/alt-tab-macos/commit/6105bb3))
+* window order in the switcher might be incorrect ([#5346](https://github.com/lwouis/alt-tab-macos/issues/5346)) ([545d81d](https://github.com/lwouis/alt-tab-macos/commit/545d81d))
+
+
+### Features
+
+* allow next-window shortcut without modifiers (closes [#5433](https://github.com/lwouis/alt-tab-macos/issues/5433)) ([15ede93](https://github.com/lwouis/alt-tab-macos/commit/15ede93))
+* stabilize ui during search (closes [#5431](https://github.com/lwouis/alt-tab-macos/issues/5431)) ([7dd11cf](https://github.com/lwouis/alt-tab-macos/commit/7dd11cf))
+
+# [10.7.0](https://github.com/lwouis/alt-tab-macos/compare/v10.6.0...v10.7.0) (2026-03-15)
+
+
+### Bug Fixes
+
+* allow quitting multiple apps in a row (closes [#5421](https://github.com/lwouis/alt-tab-macos/issues/5421)) ([de9aaa1](https://github.com/lwouis/alt-tab-macos/commit/de9aaa1))
+* avoid memory usage growth over time (closes [#5138](https://github.com/lwouis/alt-tab-macos/issues/5138)) ([739649a](https://github.com/lwouis/alt-tab-macos/commit/739649a))
+* edit shortcuts in settings window search bar on first launch ([2adf741](https://github.com/lwouis/alt-tab-macos/commit/2adf741))
+* prevent sheets from messing up thumbnails order ([#5346](https://github.com/lwouis/alt-tab-macos/issues/5346)) ([b008d63](https://github.com/lwouis/alt-tab-macos/commit/b008d63))
+* thumbnails might be shown too small ([57c95a6](https://github.com/lwouis/alt-tab-macos/commit/57c95a6))
+
+
+### Features
+
+* reduce memory usage by storing fewer app icons ([b21168a](https://github.com/lwouis/alt-tab-macos/commit/b21168a))
+
+# [10.6.0](https://github.com/lwouis/alt-tab-macos/compare/v10.5.0...v10.6.0) (2026-03-10)
+
+
+### Bug Fixes
+
+* allow edit shortcuts in the search bar (closes [#5308](https://github.com/lwouis/alt-tab-macos/issues/5308)) ([35ddbe7](https://github.com/lwouis/alt-tab-macos/commit/35ddbe7))
+* better handle context menu in search bar ([9aea8f6](https://github.com/lwouis/alt-tab-macos/commit/9aea8f6))
+* key repeat in search mode ([fd4e373](https://github.com/lwouis/alt-tab-macos/commit/fd4e373))
+* preview may not update its position (closes [#5396](https://github.com/lwouis/alt-tab-macos/issues/5396)) ([dbadb2b](https://github.com/lwouis/alt-tab-macos/commit/dbadb2b))
+* right-click and middle-click outside panel ([9969a07](https://github.com/lwouis/alt-tab-macos/commit/9969a07))
+* show preview window on first shortcut press (closes [#5385](https://github.com/lwouis/alt-tab-macos/issues/5385)) ([106f7c9](https://github.com/lwouis/alt-tab-macos/commit/106f7c9))
+* trackpad scrolling shouldn't also scroll on background apps ([cacb789](https://github.com/lwouis/alt-tab-macos/commit/cacb789))
+
+
+### Features
+
+* scrolling the settings update the sidebar (closes [#5400](https://github.com/lwouis/alt-tab-macos/issues/5400)) ([3b831d4](https://github.com/lwouis/alt-tab-macos/commit/3b831d4))
+
+# [10.5.0](https://github.com/lwouis/alt-tab-macos/compare/v10.4.0...v10.5.0) (2026-03-08)
+
+
+### Bug Fixes
+
+* input with ime better interacts with search (closes [#5377](https://github.com/lwouis/alt-tab-macos/issues/5377)) ([15caa33](https://github.com/lwouis/alt-tab-macos/commit/15caa33))
+
+
+### Features
+
+* improved search results ([0f8d6f1](https://github.com/lwouis/alt-tab-macos/commit/0f8d6f1))
+* refinements on mouse hover and dragging ([#5350](https://github.com/lwouis/alt-tab-macos/issues/5350)) ([643cc80](https://github.com/lwouis/alt-tab-macos/commit/643cc80))
+
+# [10.4.0](https://github.com/lwouis/alt-tab-macos/compare/v10.3.0...v10.4.0) (2026-03-04)
+
+
+### Bug Fixes
+
+* clicking tiles required to release precisely (closes [#5373](https://github.com/lwouis/alt-tab-macos/issues/5373)) ([2c6c9fb](https://github.com/lwouis/alt-tab-macos/commit/2c6c9fb))
+* issues when using multiple keyboard languages (closes [#2125](https://github.com/lwouis/alt-tab-macos/issues/2125)) ([ea7284b](https://github.com/lwouis/alt-tab-macos/commit/ea7284b))
+* switcher may show windows in the wrong order (closes [#5346](https://github.com/lwouis/alt-tab-macos/issues/5346)) ([a632e42](https://github.com/lwouis/alt-tab-macos/commit/a632e42))
+
+
+### Features
+
+* add kazakh and improve all localizations ([0ad389a](https://github.com/lwouis/alt-tab-macos/commit/0ad389a))
+* improve drag-and-drop over alttab (closes [#5350](https://github.com/lwouis/alt-tab-macos/issues/5350)) ([a809ffa](https://github.com/lwouis/alt-tab-macos/commit/a809ffa))
+
+# [10.3.0](https://github.com/lwouis/alt-tab-macos/compare/v10.2.0...v10.3.0) (2026-02-24)
+
+
+### Bug Fixes
+
+* avoid clipping long settings window buttons (closes [#5320](https://github.com/lwouis/alt-tab-macos/issues/5320)) ([402b6f6](https://github.com/lwouis/alt-tab-macos/commit/402b6f6))
+* closing a window would remove the thumbnail (closes [#5324](https://github.com/lwouis/alt-tab-macos/issues/5324)) ([451bbbe](https://github.com/lwouis/alt-tab-macos/commit/451bbbe))
+* fade-out speed could show wrong value in rare cases ([f5e81fe](https://github.com/lwouis/alt-tab-macos/commit/f5e81fe))
+* improve settings window on macos 10.13 ([5ce48c1](https://github.com/lwouis/alt-tab-macos/commit/5ce48c1))
+* mouse hover would sometimes disappear ([8c7263e](https://github.com/lwouis/alt-tab-macos/commit/8c7263e))
+
+
+### Features
+
+* add ur/mr localizations + update all localizations ([dc538dc](https://github.com/lwouis/alt-tab-macos/commit/dc538dc))
+* consolidate settings (closes [#1732](https://github.com/lwouis/alt-tab-macos/issues/1732)) ([219098d](https://github.com/lwouis/alt-tab-macos/commit/219098d))
+* reduce app disk size ([3c95c6c](https://github.com/lwouis/alt-tab-macos/commit/3c95c6c))
+
 # [10.2.0](https://github.com/lwouis/alt-tab-macos/compare/v10.1.0...v10.2.0) (2026-02-19)
 
 

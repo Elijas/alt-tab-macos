@@ -117,8 +117,8 @@ class CliServer {
                 })
             })
 
-            let blacklistEntries = Preferences.blacklist
-            let blacklist: [[String: String]]? = blacklistEntries.isEmpty ? nil : blacklistEntries.map { entry in
+            let exceptionEntries = Preferences.exceptions
+            let blacklist: [[String: String]]? = exceptionEntries.isEmpty ? nil : exceptionEntries.map { entry in
                 var dict: [String: String] = [
                     "bundleIdentifier": entry.bundleIdentifier,
                     "hide": entry.hide.rawValue,
@@ -168,7 +168,7 @@ class CliServer {
         }
         if rawValue.hasPrefix("--show="),
            let shortcutIndex = Int(rawValue.dropFirst("--show=".count)), (0..<Preferences.shortcutCount).contains(shortcutIndex) {
-            App.app.showUi(shortcutIndex)
+            App.showUi(shortcutIndex)
             return noOutput
         }
         if rawValue == "--open-main-panel" {
@@ -232,8 +232,8 @@ class CliServer {
         guard let mouseScreenId = NSScreen.withMouse()?.cachedUuid() else { return }
         let visibleSpaceIds = Set(Spaces.visibleSpaces)
 
-        // Blacklist: user-configured hide entries + all AltTab builds
-        let blacklistPrefixes = Preferences.blacklist
+        // Exceptions: user-configured hide entries + all AltTab builds
+        let exceptionPrefixes = Preferences.exceptions
             .filter { $0.hide != .none }
             .map { $0.bundleIdentifier }
         let altTabPrefix = "com.lwouis.alt-tab-macos.at"
@@ -248,10 +248,10 @@ class CliServer {
             guard window.spaceIds.contains(where: { visibleSpaceIds.contains($0) }) else { return false }
             guard !window.isMinimized else { return false }
             guard !window.isHidden else { return false }
-            // Not blacklisted
+            // Not excluded
             if let bundleId = window.application.bundleIdentifier {
                 if bundleId.hasPrefix(altTabPrefix) { return false }
-                for prefix in blacklistPrefixes {
+                for prefix in exceptionPrefixes {
                     if bundleId.hasPrefix(prefix) { return false }
                 }
             }

@@ -9,7 +9,7 @@ class SidePanelManager {
     private var lastRefreshTimeInNanoseconds = DispatchTime.now().uptimeNanoseconds
     private var lastSpaceChangeNanos: UInt64 = 0
     private var nextRefreshScheduled = false
-    private var resolvedBlacklist: [BlacklistEntry]?
+    private var resolvedExceptions: [ExceptionEntry]?
     private var discoveryTimer: Timer?
     private var separatorDebounce: DispatchWorkItem?
 
@@ -304,7 +304,7 @@ class SidePanelManager {
                         || window.isMinimized
                         || window.isHidden
                         || (!isVisible && !isTab)
-                        || self.isBlacklisted(window)
+                        || self.isExcluded(window)
                         || panelWindowNumbers.contains(Int(wid))
                     if !dominated {
                         group.append(window)
@@ -319,7 +319,7 @@ class SidePanelManager {
                        !seen.contains(childWid),
                        !visibleOnSpace.contains(childWid),
                        let window = windowByCgId[childWid],
-                       !self.isBlacklisted(window),
+                       !self.isExcluded(window),
                        !panelWindowNumbers.contains(Int(childWid)) {
                         group.append(window)
                     }
@@ -429,29 +429,29 @@ class SidePanelManager {
         var isSelected: Bool
     }
 
-    // MARK: - Blacklist
+    // MARK: - Exceptions
 
-    private func blacklist() -> [BlacklistEntry] {
-        if let resolved = resolvedBlacklist { return resolved }
+    private func exceptions() -> [ExceptionEntry] {
+        if let resolved = resolvedExceptions { return resolved }
         // read from main AltTab's preferences domain (sidepanel has its own bundle id)
-        var entries = Preferences.blacklist
+        var entries = Preferences.exceptions
         if let mainDefaults = UserDefaults(suiteName: Self.mainAltTabBundleId),
-           let json = mainDefaults.string(forKey: "blacklist"),
+           let json = mainDefaults.string(forKey: "exceptions"),
            let data = json.data(using: .utf8),
-           let mainEntries = try? JSONDecoder().decode([BlacklistEntry].self, from: data) {
+           let mainEntries = try? JSONDecoder().decode([ExceptionEntry].self, from: data) {
             // merge: main AltTab entries take precedence, add any not already present
             let existingIds = Set(entries.map { $0.bundleIdentifier })
             for entry in mainEntries where !existingIds.contains(entry.bundleIdentifier) {
                 entries.append(entry)
             }
         }
-        resolvedBlacklist = entries
+        resolvedExceptions = entries
         return entries
     }
 
-    private func isBlacklisted(_ window: Window) -> Bool {
+    private func isExcluded(_ window: Window) -> Bool {
         guard let bundleId = window.application.bundleIdentifier else { return false }
-        return blacklist().contains { entry in
+        return exceptions().contains { entry in
             guard entry.hide != .none else { return false }
             guard bundleId.hasPrefix(entry.bundleIdentifier) else { return false }
             switch entry.hide {
@@ -481,7 +481,7 @@ class SidePanelManager {
 
         // our own panel windows to exclude
         let panelWindowNumbers = allWindowNumbers()
-        let tilesWindowNumber = App.app.tilesPanel.windowNumber
+        let tilesWindowNumber = TilesPanel.shared.windowNumber
 
         // system processes that never produce user windows
         let systemProcessNames: Set<String> = [
@@ -526,7 +526,7 @@ class SidePanelManager {
         // trigger targeted AX re-discovery only for apps with missing windows
         for pid in pidsWithMissingWindows {
             if let app = Applications.list.first(where: { $0.pid == pid }) {
-                app.manuallyUpdateWindows()
+                Applications.manuallyUpdateWindows(app)
             }
         }
     }

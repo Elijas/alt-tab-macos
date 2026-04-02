@@ -2,6 +2,39 @@ import Cocoa
 import Carbon.HIToolbox.Events
 import ShortcutRecorder
 
+private func shortcutSeparatorView() -> NSBox {
+    let separator = NSBox()
+    separator.boxType = .separator
+    separator.translatesAutoresizingMaskIntoConstraints = false
+    return separator
+}
+
+private class ShortcutSidebarContainer: NSView {
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        translatesAutoresizingMaskIntoConstraints = false
+        wantsLayer = true
+        layer?.cornerRadius = TableGroupView.cornerRadius
+        layer?.borderWidth = TableGroupView.borderWidth
+        layer?.masksToBounds = true
+        refreshColors()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("Class only supports programmatic initialization")
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        refreshColors()
+    }
+
+    private func refreshColors() {
+        layer?.backgroundColor = NSColor.tableBackgroundColor.cgColor
+        layer?.borderColor = NSColor.tableBorderColor.cgColor
+    }
+}
+
 private class ShortcutSidebarRow: ClickHoverStackView {
     private let titleLabel = NSTextField(labelWithString: "")
     private let summaryLabel = NSTextField(labelWithString: "")
@@ -60,65 +93,22 @@ private class ShortcutSidebarRow: ClickHoverStackView {
     }
 
     private func updateStyle() {
-        let selectedColor = NSColor.systemAccentColor.withAlphaComponent(0.16)
-        let backgroundColor = isSelectedRow ? selectedColor : (isHoveredRow ? NSColor.tableHoverColor : .clear)
+        let selectedBackgroundColor = NSColor.systemAccentColor
+        let hoverBackgroundColor = NSColor.systemAccentColor.withAlphaComponent(0.14)
+        let backgroundColor = isSelectedRow ? selectedBackgroundColor : (isHoveredRow ? hoverBackgroundColor : .clear)
         let titleFont = NSFont.systemFont(ofSize: 13, weight: isSelectedRow ? .semibold : .regular)
-        titleLabel.attributedStringValue = NSAttributedString(string: titleLabel.stringValue, attributes: [.font: titleFont, .foregroundColor: NSColor.labelColor])
+        titleLabel.font = titleFont
+        if isSelectedRow {
+            let selectedTextColor = NSColor.white.withAlphaComponent(0.97)
+            titleLabel.textColor = selectedTextColor
+            summaryLabel.textColor = selectedTextColor.withAlphaComponent(0.84)
+            chevronLabel.textColor = selectedTextColor.withAlphaComponent(0.8)
+        } else {
+            titleLabel.textColor = .labelColor
+            summaryLabel.textColor = .secondaryLabelColor
+            chevronLabel.textColor = .secondaryLabelColor
+        }
         layer?.backgroundColor = backgroundColor.cgColor
-    }
-}
-
-private class ControlsSidebarScrollView: NSScrollView {
-    override func wantsForwardedScrollEvents(for axis: NSEvent.GestureAxis) -> Bool {
-        axis == .vertical
-    }
-
-    override func scrollWheel(with event: NSEvent) {
-        let before = contentView.bounds.origin
-        super.scrollWheel(with: event)
-        DispatchQueue.main.async { [weak self] in
-            guard let self, self.shouldForwardToParent(event, before) else { return }
-            self.parentScrollView()?.scrollWheel(with: event)
-        }
-    }
-
-    private func shouldForwardToParent(_ event: NSEvent, _ before: CGPoint) -> Bool {
-        guard isVerticalScroll(event) else { return false }
-        guard abs(contentView.bounds.origin.y - before.y) < 0.01 else { return false }
-        return isAtVerticalBoundary(event)
-    }
-
-    private func isVerticalScroll(_ event: NSEvent) -> Bool {
-        abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) && abs(event.scrollingDeltaY) > 0.1
-    }
-
-    private func isAtVerticalBoundary(_ event: NSEvent) -> Bool {
-        guard let content = documentView else { return false }
-        let visible = contentView.documentVisibleRect
-        let dy = normalizedVerticalDelta(event)
-        if dy > 0 { return visible.minY <= content.bounds.minY + 0.5 }
-        if dy < 0 { return visible.maxY >= content.bounds.maxY - 0.5 }
-        return false
-    }
-
-    private func normalizedVerticalDelta(_ event: NSEvent) -> CGFloat {
-        let delta = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY : event.deltaY
-        return event.isDirectionInvertedFromDevice ? -delta : delta
-    }
-
-    private func parentScrollView() -> NSScrollView? {
-        var parent = superview
-        while let view = parent {
-            if let scrollView = view as? NSScrollView { return scrollView }
-            parent = view.superview
-        }
-        return nil
-    }
-}
-
-private class ControlsSidebarDocumentView: FlippedView {
-    override func wantsForwardedScrollEvents(for axis: NSEvent.GestureAxis) -> Bool {
-        axis == .vertical
     }
 }
 
@@ -126,30 +116,24 @@ class ControlsTab {
     static var shortcuts = [String: ATShortcut]()
     static var shortcutControls = [String: (CustomRecorderControl, String)]()
     static var shortcutsActions = [
-        "holdShortcut": { App.app.focusTarget() },
-        "holdShortcut2": { App.app.focusTarget() },
-        "holdShortcut3": { App.app.focusTarget() },
-        "focusWindowShortcut": { App.app.focusTarget() },
-        "nextWindowShortcut": { App.app.showUiOrCycleSelection(0, false) },
-        "nextWindowShortcut2": { App.app.showUiOrCycleSelection(1, false) },
-        "nextWindowShortcut3": { App.app.showUiOrCycleSelection(2, false) },
-        "previousWindowShortcut": { App.app.previousWindowShortcutWithRepeatingKey() },
-        "→": { App.app.cycleSelection(.right) },
-        "←": { App.app.cycleSelection(.left) },
-        "↑": { App.app.cycleSelection(.up) },
-        "↓": { App.app.cycleSelection(.down) },
-        "vimCycleRight": { App.app.cycleSelection(.right) },
-        "vimCycleLeft": { App.app.cycleSelection(.left) },
-        "vimCycleUp": { App.app.cycleSelection(.up) },
-        "vimCycleDown": { App.app.cycleSelection(.down) },
-        "cancelShortcut": { App.app.cancelSearchModeOrHideUi() },
-        "closeWindowShortcut": { App.app.closeSelectedWindow() },
-        "minDeminWindowShortcut": { App.app.minDeminSelectedWindow() },
-        "toggleFullscreenWindowShortcut": { App.app.toggleFullscreenSelectedWindow() },
-        "quitAppShortcut": { App.app.quitSelectedApp() },
-        "hideShowAppShortcut": { App.app.hideShowSelectedApp() },
-        "searchShortcut": { App.app.toggleSearchMode() },
-        "lockSearchShortcut": { App.app.lockSearchMode() },
+        "focusWindowShortcut": { App.focusTarget() },
+        "previousWindowShortcut": { App.previousWindowShortcutWithRepeatingKey() },
+        "→": { App.cycleSelection(.right) },
+        "←": { App.cycleSelection(.left) },
+        "↑": { App.cycleSelection(.up) },
+        "↓": { App.cycleSelection(.down) },
+        "vimCycleRight": { App.cycleSelection(.right) },
+        "vimCycleLeft": { App.cycleSelection(.left) },
+        "vimCycleUp": { App.cycleSelection(.up) },
+        "vimCycleDown": { App.cycleSelection(.down) },
+        "cancelShortcut": { App.cancelSearchModeOrHideUi() },
+        "closeWindowShortcut": { App.closeSelectedWindow() },
+        "minDeminWindowShortcut": { App.minDeminSelectedWindow() },
+        "toggleFullscreenWindowShortcut": { App.toggleFullscreenSelectedWindow() },
+        "quitAppShortcut": { App.quitSelectedApp() },
+        "hideShowAppShortcut": { App.hideShowSelectedApp() },
+        "searchShortcut": { App.toggleSearchMode() },
+        "lockSearchShortcut": { App.lockSearchMode() },
     ]
     static var arrowKeysCheckbox: Switch!
     static var vimKeysCheckbox: Switch!
@@ -159,7 +143,11 @@ class ControlsTab {
 
     private static let shortcutSidebarWidth = CGFloat(200)
     private static let sidebarRowHeight = CGFloat(52)
+    private static let sidebarHorizontalPadding = TableGroupView.padding
+    private static let shortcutEditorTopBottomPadding = TableGroupView.padding
+    private static let shortcutEditorRightPadding = TableGroupView.padding
     private static var shortcutEditorWidth: CGFloat { SettingsWindow.contentWidth - shortcutSidebarWidth - 1 }
+    private static var shortcutEditorContentWidth: CGFloat { shortcutEditorWidth - shortcutEditorRightPadding }
     private static let gestureSelectionIndex = -1
     private static let staticManagedShortcutPreferences = [
         "focusWindowShortcut", "previousWindowShortcut", "cancelShortcut", "searchShortcut", "lockSearchShortcut",
@@ -191,6 +179,8 @@ class ControlsTab {
     private static var gestureSidebarRow: ShortcutSidebarRow?
     private static var gestureEditorView: TableGroupView?
     private static var shortcutCountButtons: NSSegmentedControl?
+    private static var shortcutRowsScrollView: NSScrollView?
+    private static var shortcutRowsScrollObserver: NSObjectProtocol?
 
     static func initializePreferencesDependentState() {
         applyActiveShortcutPreferences()
@@ -226,6 +216,11 @@ class ControlsTab {
         }
     }
 
+    static func inputSourceChanged() {
+        refreshShortcutRows()
+        refreshShortcutControlsDisplay()
+    }
+
     static func initTab() -> NSView {
         shortcutEditorViews = (0..<Preferences.maxShortcutCount).map { shortcutTab($0) }
         gestureEditorView = gestureTab(Preferences.gestureIndex)
@@ -244,25 +239,24 @@ class ControlsTab {
     private static func makeShortcutsView() -> NSView {
         let sidebar = makeShortcutSidebar()
         let editorPane = makeEditorPane()
-        let separator = NSView()
-        separator.wantsLayer = true
-        separator.layer?.backgroundColor = NSColor.tableSeparatorColor.cgColor
-        separator.translatesAutoresizingMaskIntoConstraints = false
+        let separator = shortcutSeparatorView()
         separator.widthAnchor.constraint(equalToConstant: 1).isActive = true
         let content = NSStackView(views: [sidebar, separator, editorPane])
         content.orientation = .horizontal
         content.alignment = .top
         content.spacing = 0
         content.translatesAutoresizingMaskIntoConstraints = false
-        content.wantsLayer = true
-        content.layer?.backgroundColor = NSColor.tableBackgroundColor.cgColor
-        content.layer?.cornerRadius = TableGroupView.cornerRadius
-        content.layer?.borderColor = NSColor.tableBorderColor.cgColor
-        content.layer?.borderWidth = TableGroupView.borderWidth
-        content.layer?.masksToBounds = true
-        content.widthAnchor.constraint(equalToConstant: SettingsWindow.contentWidth).isActive = true
         sidebar.heightAnchor.constraint(equalTo: editorPane.heightAnchor).isActive = true
-        return content
+        let container = ShortcutSidebarContainer()
+        container.widthAnchor.constraint(equalToConstant: SettingsWindow.contentWidth).isActive = true
+        container.addSubview(content)
+        NSLayoutConstraint.activate([
+            content.topAnchor.constraint(equalTo: container.topAnchor),
+            content.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            content.bottomAnchor.constraint(equalTo: container.bottomAnchor),
+        ])
+        return container
     }
 
     private static func makeEditorPane() -> NSView {
@@ -280,10 +274,10 @@ class ControlsTab {
         editorsStack.translatesAutoresizingMaskIntoConstraints = false
         pane.addSubview(editorsStack)
         NSLayoutConstraint.activate([
-            editorsStack.topAnchor.constraint(equalTo: pane.topAnchor),
+            editorsStack.topAnchor.constraint(equalTo: pane.topAnchor, constant: shortcutEditorTopBottomPadding),
             editorsStack.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
-            editorsStack.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
-            editorsStack.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
+            editorsStack.trailingAnchor.constraint(equalTo: pane.trailingAnchor, constant: -shortcutEditorRightPadding),
+            editorsStack.bottomAnchor.constraint(equalTo: pane.bottomAnchor, constant: -shortcutEditorTopBottomPadding),
         ])
         return pane
     }
@@ -292,44 +286,39 @@ class ControlsTab {
         let sidebar = NSView()
         sidebar.translatesAutoresizingMaskIntoConstraints = false
         sidebar.widthAnchor.constraint(equalToConstant: shortcutSidebarWidth).isActive = true
-        sidebar.wantsLayer = true
-        sidebar.layer?.backgroundColor = NSColor.windowBackgroundColor.withAlphaComponent(0.25).cgColor
         let listContainer = NSView()
         listContainer.translatesAutoresizingMaskIntoConstraints = false
-        listContainer.wantsLayer = true
-        listContainer.layer?.backgroundColor = NSColor.tableBackgroundColor.cgColor
-        listContainer.layer?.cornerRadius = TableGroupView.cornerRadius
-        listContainer.layer?.borderColor = NSColor.tableBorderColor.cgColor
-        listContainer.layer?.borderWidth = TableGroupView.borderWidth
+        let shortcutsSection = ShortcutSidebarContainer()
         let rows = NSStackView()
         rows.orientation = .vertical
         rows.alignment = .leading
         rows.spacing = 0
         rows.translatesAutoresizingMaskIntoConstraints = false
         shortcutRowsStackView = rows
-        let rowsScrollView = ControlsSidebarScrollView()
+        let rowsScrollView = ForwardingVerticalScrollView()
         rowsScrollView.translatesAutoresizingMaskIntoConstraints = false
         rowsScrollView.drawsBackground = false
         rowsScrollView.hasVerticalScroller = true
         rowsScrollView.hasHorizontalScroller = false
         rowsScrollView.scrollerStyle = .overlay
         rowsScrollView.usesPredominantAxisScrolling = true
-        let documentView = ControlsSidebarDocumentView(frame: .zero)
+        rowsScrollView.contentView.postsBoundsChangedNotifications = true
+        let documentView = ForwardingVerticalDocumentView(frame: .zero)
         documentView.translatesAutoresizingMaskIntoConstraints = false
         rowsScrollView.documentView = documentView
         documentView.addSubview(rows)
-        let gestureSeparator = NSView()
-        gestureSeparator.translatesAutoresizingMaskIntoConstraints = false
-        gestureSeparator.wantsLayer = true
-        gestureSeparator.layer?.backgroundColor = NSColor.tableSeparatorColor.cgColor
+        shortcutRowsScrollView = rowsScrollView
+        installShortcutSidebarHoverObserver(rowsScrollView)
+        let gestureSeparator = shortcutSeparatorView()
         let gestureRow = ShortcutSidebarRow()
         gestureRow.onClick = { _, _ in selectGesture() }
-        gestureRow.onMouseEntered = { _, _ in gestureRow.setHovered(true) }
-        gestureRow.onMouseExited = { _, _ in gestureRow.setHovered(false) }
+        gestureRow.onMouseEntered = { _, _ in setHoveredShortcutRow(gestureRow) }
+        gestureRow.onMouseExited = { _, _ in setHoveredShortcutRow(nil) }
         gestureSidebarRow = gestureRow
-        listContainer.addSubview(rowsScrollView)
-        listContainer.addSubview(gestureSeparator)
-        listContainer.addSubview(gestureRow)
+        listContainer.addSubview(shortcutsSection)
+        shortcutsSection.addSubview(rowsScrollView)
+        shortcutsSection.addSubview(gestureSeparator)
+        shortcutsSection.addSubview(gestureRow)
         let countButtons = NSSegmentedControl(labels: ["+", "-"], trackingMode: .momentary, target: self, action: #selector(updateShortcutCount(_:)))
         countButtons.translatesAutoresizingMaskIntoConstraints = false
         countButtons.segmentStyle = .rounded
@@ -341,32 +330,37 @@ class ControlsTab {
         buttonsRow.alignment = .leading
         buttonsRow.translatesAutoresizingMaskIntoConstraints = false
         sidebar.addSubview(listContainer)
-        sidebar.addSubview(buttonsRow)
+        listContainer.addSubview(buttonsRow)
         NSLayoutConstraint.activate([
-            listContainer.topAnchor.constraint(equalTo: sidebar.topAnchor, constant: 10),
-            listContainer.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 10),
-            listContainer.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor, constant: -10),
-            listContainer.bottomAnchor.constraint(equalTo: buttonsRow.topAnchor, constant: -10),
+            listContainer.topAnchor.constraint(equalTo: sidebar.topAnchor),
+            listContainer.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor),
+            listContainer.trailingAnchor.constraint(equalTo: sidebar.trailingAnchor),
+            listContainer.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor),
             documentView.widthAnchor.constraint(equalTo: rowsScrollView.contentView.widthAnchor),
             documentView.heightAnchor.constraint(greaterThanOrEqualTo: rowsScrollView.contentView.heightAnchor),
             rows.topAnchor.constraint(equalTo: documentView.topAnchor),
             rows.leadingAnchor.constraint(equalTo: documentView.leadingAnchor),
             rows.trailingAnchor.constraint(equalTo: documentView.trailingAnchor),
             rows.bottomAnchor.constraint(lessThanOrEqualTo: documentView.bottomAnchor),
-            rowsScrollView.topAnchor.constraint(equalTo: listContainer.topAnchor),
-            rowsScrollView.leadingAnchor.constraint(equalTo: listContainer.leadingAnchor),
-            rowsScrollView.trailingAnchor.constraint(equalTo: listContainer.trailingAnchor),
+            shortcutsSection.topAnchor.constraint(equalTo: listContainer.topAnchor, constant: TableGroupView.padding),
+            shortcutsSection.leadingAnchor.constraint(equalTo: listContainer.leadingAnchor, constant: sidebarHorizontalPadding),
+            shortcutsSection.trailingAnchor.constraint(equalTo: listContainer.trailingAnchor, constant: -sidebarHorizontalPadding),
+            shortcutsSection.bottomAnchor.constraint(equalTo: buttonsRow.topAnchor, constant: -TableGroupView.padding),
+            rowsScrollView.topAnchor.constraint(equalTo: shortcutsSection.topAnchor),
+            rowsScrollView.leadingAnchor.constraint(equalTo: shortcutsSection.leadingAnchor),
+            rowsScrollView.trailingAnchor.constraint(equalTo: shortcutsSection.trailingAnchor),
             rowsScrollView.bottomAnchor.constraint(equalTo: gestureSeparator.topAnchor),
-            gestureSeparator.leadingAnchor.constraint(equalTo: listContainer.leadingAnchor),
-            gestureSeparator.trailingAnchor.constraint(equalTo: listContainer.trailingAnchor),
+            gestureSeparator.leadingAnchor.constraint(equalTo: shortcutsSection.leadingAnchor),
+            gestureSeparator.trailingAnchor.constraint(equalTo: shortcutsSection.trailingAnchor),
             gestureSeparator.heightAnchor.constraint(equalToConstant: TableGroupView.borderWidth),
             gestureSeparator.bottomAnchor.constraint(equalTo: gestureRow.topAnchor),
-            gestureRow.leadingAnchor.constraint(equalTo: listContainer.leadingAnchor),
-            gestureRow.trailingAnchor.constraint(equalTo: listContainer.trailingAnchor),
+            gestureRow.leadingAnchor.constraint(equalTo: shortcutsSection.leadingAnchor),
+            gestureRow.trailingAnchor.constraint(equalTo: shortcutsSection.trailingAnchor),
             gestureRow.heightAnchor.constraint(equalToConstant: sidebarRowHeight),
-            gestureRow.bottomAnchor.constraint(equalTo: listContainer.bottomAnchor),
-            buttonsRow.leadingAnchor.constraint(equalTo: sidebar.leadingAnchor, constant: 10),
-            buttonsRow.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor, constant: -10),
+            gestureRow.bottomAnchor.constraint(equalTo: shortcutsSection.bottomAnchor),
+            buttonsRow.leadingAnchor.constraint(equalTo: listContainer.leadingAnchor, constant: sidebarHorizontalPadding),
+            buttonsRow.trailingAnchor.constraint(lessThanOrEqualTo: listContainer.trailingAnchor, constant: -sidebarHorizontalPadding),
+            buttonsRow.bottomAnchor.constraint(equalTo: listContainer.bottomAnchor, constant: -TableGroupView.padding),
         ])
         refreshGestureRow()
         return sidebar
@@ -374,13 +368,11 @@ class ControlsTab {
 
     private static func shortcutTab(_ index: Int) -> TableGroupView {
         let holdName = Preferences.indexToName("holdShortcut", index)
-        let holdValue = UserDefaults.standard.string(forKey: holdName) ?? ""
-        var holdShortcut = LabelAndControl.makeLabelWithRecorder(NSLocalizedString("Hold", comment: ""), holdName, holdValue, false, labelPosition: .leftWithoutSeparator)
+        var holdShortcut = LabelAndControl.makeLabelWithRecorder(NSLocalizedString("Hold", comment: ""), holdName, Preferences.shortcut(holdName), false, labelPosition: .leftWithoutSeparator)
         holdShortcut.append(LabelAndControl.makeLabel(NSLocalizedString("and press", comment: "")))
         let nextName = Preferences.indexToName("nextWindowShortcut", index)
-        let nextValue = UserDefaults.standard.string(forKey: nextName) ?? ""
-        let nextWindowShortcut = LabelAndControl.makeLabelWithRecorder(NSLocalizedString("Select next window", comment: ""), nextName, nextValue, labelPosition: .right)
-        return controlTab(index, holdShortcut + [nextWindowShortcut[0]], shortcutEditorWidth)
+        let nextWindowShortcut = LabelAndControl.makeLabelWithRecorder(NSLocalizedString("Select next window", comment: ""), nextName, Preferences.shortcut(nextName), labelPosition: .right)
+        return controlTab(index, holdShortcut + [nextWindowShortcut[0]], shortcutEditorContentWidth)
     }
 
     private static func gestureTab(_ index: Int) -> TableGroupView {
@@ -398,7 +390,7 @@ class ControlsTab {
         gestureWithTooltip.setViews([infoBtn], in: .leading)
         gestureWithTooltip.heightAnchor.constraint(equalTo: dummyRecorderForHeight.heightAnchor).isActive = true
         dummyRecorderForHeight.isHidden = true
-        return controlTab(index, [gestureWithTooltip], shortcutEditorWidth)
+        return controlTab(index, [gestureWithTooltip], shortcutEditorContentWidth)
     }
 
     private static func controlTab(_ index: Int, _ trigger: [NSView], _ width: CGFloat) -> TableGroupView {
@@ -424,6 +416,13 @@ class ControlsTab {
         return table
     }
 
+    private static func refreshShortcutControlsDisplay() {
+        shortcutControls.values.forEach {
+            $0.0.needsDisplay = true
+            $0.0.invalidateIntrinsicContentSize()
+        }
+    }
+
     private static func refreshShortcutUi() {
         if selectedShortcutIndex != gestureSelectionIndex {
             selectedShortcutIndex = max(0, min(selectedShortcutIndex, Preferences.shortcutCount - 1))
@@ -436,6 +435,7 @@ class ControlsTab {
 
     private static func refreshShortcutRows() {
         guard let rows = shortcutRowsStackView else { return }
+        setHoveredShortcutRow(nil)
         clearArrangedSubviews(rows)
         shortcutRows.removeAll(keepingCapacity: true)
         for index in 0..<Preferences.shortcutCount {
@@ -443,22 +443,21 @@ class ControlsTab {
             row.setContent(shortcutTitle(index), shortcutSummary(index))
             row.setSelected(index == selectedShortcutIndex && selectedShortcutIndex != gestureSelectionIndex)
             row.onClick = { _, _ in selectShortcut(index) }
-            row.onMouseEntered = { _, _ in row.setHovered(true) }
-            row.onMouseExited = { _, _ in row.setHovered(false) }
+            row.onMouseEntered = { _, _ in setHoveredShortcutRow(row) }
+            row.onMouseExited = { _, _ in setHoveredShortcutRow(nil) }
             rows.addArrangedSubview(row)
             row.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
             row.heightAnchor.constraint(equalToConstant: sidebarRowHeight).isActive = true
             shortcutRows.append(row)
             if index < Preferences.shortcutCount - 1 {
-                let separator = NSView()
-                separator.translatesAutoresizingMaskIntoConstraints = false
-                separator.wantsLayer = true
-                separator.layer?.backgroundColor = NSColor.tableSeparatorColor.cgColor
+                let separator = shortcutSeparatorView()
                 rows.addArrangedSubview(separator)
-                separator.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
+                separator.leadingAnchor.constraint(equalTo: rows.leadingAnchor, constant: TableGroupView.padding).isActive = true
+                separator.trailingAnchor.constraint(equalTo: rows.trailingAnchor, constant: -TableGroupView.padding).isActive = true
                 separator.heightAnchor.constraint(equalToConstant: TableGroupView.borderWidth).isActive = true
             }
         }
+        syncShortcutSidebarHoverState()
     }
 
     private static func refreshShortcutSelection() {
@@ -529,8 +528,8 @@ class ControlsTab {
     }
 
     private static func setAddedShortcutTriggerDefaults(_ index: Int) {
-        Preferences.set(Preferences.indexToName("holdShortcut", index), "⌥", false)
-        Preferences.set(Preferences.indexToName("nextWindowShortcut", index), "", false)
+        Preferences.setShortcut(Preferences.indexToName("holdShortcut", index), keyEquivalent: "⌥", false)
+        Preferences.setShortcut(Preferences.indexToName("nextWindowShortcut", index), keyEquivalent: "", false)
         Preferences.set(Preferences.indexToName("appsToShow", index), AppsToShowPreference.all.indexAsString, false)
     }
 
@@ -538,8 +537,9 @@ class ControlsTab {
         removableShortcutPreferences.forEach { baseName in
             let fromKey = Preferences.indexToName(baseName, fromIndex)
             let toKey = Preferences.indexToName(baseName, toIndex)
-            if let value = UserDefaults.standard.string(forKey: fromKey) {
-                Preferences.set(toKey, value, false)
+            if let value = UserDefaults.standard.object(forKey: fromKey) {
+                UserDefaults.standard.set(value, forKey: toKey)
+                CachedUserDefaults.removeFromCache(toKey)
             } else {
                 Preferences.remove(toKey, false)
             }
@@ -563,8 +563,7 @@ class ControlsTab {
 
     private static func syncShortcutRecorderControlValue(_ controlId: String) {
         guard let control = shortcutControls[controlId]?.0 else { return }
-        let value = UserDefaults.standard.string(forKey: controlId) ?? ""
-        control.objectValue = value.isEmpty ? nil : Shortcut(keyEquivalent: value)
+        control.objectValue = Preferences.shortcut(controlId)
     }
 
     private static func syncShortcutDropdownControlValue(_ controlId: String) {
@@ -593,8 +592,8 @@ class ControlsTab {
     }
 
     private static func shortcutSummary(_ index: Int) -> String {
-        let holdShortcut = UserDefaults.standard.string(forKey: Preferences.indexToName("holdShortcut", index)) ?? ""
-        let nextWindowShortcut = UserDefaults.standard.string(forKey: Preferences.indexToName("nextWindowShortcut", index)) ?? ""
+        let holdShortcut = Preferences.shortcut(Preferences.indexToName("holdShortcut", index))?.keyEquivalent ?? ""
+        let nextWindowShortcut = Preferences.shortcut(Preferences.indexToName("nextWindowShortcut", index))?.keyEquivalent ?? ""
         if nextWindowShortcut.isEmpty {
             return holdShortcut
         }
@@ -613,6 +612,47 @@ class ControlsTab {
         guard let gestureSidebarRow else { return }
         gestureSidebarRow.setContent(gestureTitle(), gestureSummary())
         gestureSidebarRow.setSelected(selectedShortcutIndex == gestureSelectionIndex)
+    }
+
+    private static func installShortcutSidebarHoverObserver(_ scrollView: NSScrollView) {
+        if let shortcutRowsScrollObserver {
+            NotificationCenter.default.removeObserver(shortcutRowsScrollObserver)
+        }
+        shortcutRowsScrollObserver = NotificationCenter.default.addObserver(forName: NSView.boundsDidChangeNotification, object: scrollView.contentView, queue: .main) { _ in
+            syncShortcutSidebarHoverState()
+        }
+    }
+
+    private static func setHoveredShortcutRow(_ row: ShortcutSidebarRow?) {
+        shortcutRows.forEach { $0.setHovered($0 === row) }
+        if let gestureSidebarRow {
+            gestureSidebarRow.setHovered(gestureSidebarRow === row)
+        }
+    }
+
+    private static func syncShortcutSidebarHoverState() {
+        guard let shortcutRowsScrollView else { return }
+        setHoveredShortcutRow(hoveredShortcutRowAtCursor(shortcutRowsScrollView))
+    }
+
+    private static func hoveredShortcutRowAtCursor(_ scrollView: NSScrollView) -> ShortcutSidebarRow? {
+        guard let window = scrollView.window else { return nil }
+        let cursorInScrollView = scrollView.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        guard scrollView.bounds.contains(cursorInScrollView) else { return nil }
+        guard let documentView = scrollView.documentView else { return nil }
+        let cursorInDocumentView = documentView.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        return enclosingShortcutSidebarRow(documentView.hitTest(cursorInDocumentView))
+    }
+
+    private static func enclosingShortcutSidebarRow(_ view: NSView?) -> ShortcutSidebarRow? {
+        var current = view
+        while let candidate = current {
+            if let row = candidate as? ShortcutSidebarRow {
+                return row
+            }
+            current = candidate.superview
+        }
+        return nil
     }
 
     private static func clearArrangedSubviews(_ stackView: NSStackView) {
@@ -642,11 +682,11 @@ class ControlsTab {
     }
 
     @objc static func showShortcutsSettings() {
-        App.app.settingsWindow.beginSheetWithSearchHighlight(shortcutsWhenActiveSheet)
+        SettingsWindow.shared.beginSheetWithSearchHighlight(shortcutsWhenActiveSheet)
     }
 
     @objc static func showAdditionalControlsSettings() {
-        App.app.settingsWindow.beginSheetWithSearchHighlight(additionalControlsSheet)
+        SettingsWindow.shared.beginSheetWithSearchHighlight(additionalControlsSheet)
     }
 
     private static func addShortcut(_ triggerPhase: ShortcutTriggerPhase, _ scope: ShortcutScope, _ shortcut: Shortcut, _ controlId: String, _ index: Int?) {
@@ -681,8 +721,7 @@ class ControlsTab {
         }
         if controlId.hasPrefix("holdShortcut") {
             let i = Preferences.nameToIndex(controlId)
-            let holdShortcut = UserDefaults.standard.string(forKey: controlId) ?? ""
-            guard let shortcut = Shortcut(keyEquivalent: holdShortcut) else {
+            guard let shortcut = Preferences.shortcut(controlId) else {
                 removeShortcutIfExists(controlId)
                 return
             }
@@ -692,9 +731,8 @@ class ControlsTab {
                 shortcutChangedCallback(nextWindowShortcut)
             }
         } else {
-            let newValue = combineHoldAndNextWindow(controlId, sender)
-            let newShortcut = Shortcut(keyEquivalent: newValue)
-            if newValue.isEmpty || newShortcut == nil {
+            let newShortcut = combineHoldAndNextWindow(controlId, sender)
+            if newShortcut == nil {
                 removeShortcutIfExists(controlId)
                 restrictModifiersOfHoldShortcut(controlId, [])
                 (sender as! CustomRecorderControl).objectValue = nil
@@ -714,16 +752,13 @@ class ControlsTab {
         }
     }
 
-    static func combineHoldAndNextWindow(_ controlId: String, _ sender: NSControl) -> String {
-        let baseValue = (sender as! RecorderControl).stringValue
-        if baseValue == "" {
-            return ""
-        }
+    static func combineHoldAndNextWindow(_ controlId: String, _ sender: NSControl) -> Shortcut? {
+        guard let baseShortcut = (sender as! RecorderControl).objectValue else { return nil }
         if controlId.starts(with: "nextWindowShortcut") {
-            let holdShortcut = UserDefaults.standard.string(forKey: Preferences.indexToName("holdShortcut", Preferences.nameToIndex(controlId))) ?? ""
-            return holdShortcut + baseValue
+            let holdShortcut = Preferences.shortcut(Preferences.indexToName("holdShortcut", Preferences.nameToIndex(controlId)))
+            return combineShortcuts(holdShortcut, baseShortcut)
         }
-        return baseValue
+        return baseShortcut
     }
 
     @objc static func arrowKeysEnabledCallback(_ sender: NSControl) {
@@ -756,7 +791,7 @@ class ControlsTab {
             }
         }
         if !conflicts.isEmpty {
-            if App.app.settingsWindow == nil || !shouldClearConflictingShortcuts(conflicts.map { $0.value }) {
+            if SettingsWindow.shared == nil || !shouldClearConflictingShortcuts(conflicts.map { $0.value }) {
                 return false
             }
             conflicts.forEach {
@@ -820,8 +855,7 @@ class ControlsTab {
             applyShortcutPreference(Preferences.indexToName("nextWindowShortcut", Preferences.nameToIndex(controlId)))
             return
         }
-        let shortcutString = combinedShortcutString(controlId)
-        guard !shortcutString.isEmpty, let shortcut = Shortcut(keyEquivalent: shortcutString) else {
+        guard let shortcut = combinedShortcut(controlId) else {
             removeShortcutIfExists(controlId)
             restrictModifiersOfHoldShortcut(controlId, [])
             return
@@ -832,23 +866,25 @@ class ControlsTab {
 
     private static func applyHoldShortcutPreference(_ controlId: String) {
         let i = Preferences.nameToIndex(controlId)
-        let holdShortcut = UserDefaults.standard.string(forKey: controlId) ?? ""
-        guard let shortcut = Shortcut(keyEquivalent: holdShortcut) else {
+        guard let shortcut = Preferences.shortcut(controlId) else {
             removeShortcutIfExists(controlId)
             return
         }
         addShortcut(.up, .global, shortcut, controlId, i)
     }
 
-    private static func combinedShortcutString(_ controlId: String) -> String {
-        guard let baseValue = UserDefaults.standard.string(forKey: controlId), !baseValue.isEmpty else {
-            return ""
-        }
+    private static func combinedShortcut(_ controlId: String) -> Shortcut? {
+        guard let baseShortcut = Preferences.shortcut(controlId) else { return nil }
         if controlId.starts(with: "nextWindowShortcut") {
-            let holdShortcut = UserDefaults.standard.string(forKey: Preferences.indexToName("holdShortcut", Preferences.nameToIndex(controlId))) ?? ""
-            return holdShortcut + baseValue
+            let holdShortcut = Preferences.shortcut(Preferences.indexToName("holdShortcut", Preferences.nameToIndex(controlId)))
+            return combineShortcuts(holdShortcut, baseShortcut)
         }
-        return baseValue
+        return baseShortcut
+    }
+
+    private static func combineShortcuts(_ holdShortcut: Shortcut?, _ baseShortcut: Shortcut) -> Shortcut {
+        guard let holdShortcut else { return baseShortcut }
+        return Shortcut(code: baseShortcut.keyCode, modifierFlags: [holdShortcut.modifierFlags, baseShortcut.modifierFlags], characters: baseShortcut.characters, charactersIgnoringModifiers: baseShortcut.charactersIgnoringModifiers)
     }
 
     private static func applyArrowKeysPreference() {
@@ -891,11 +927,11 @@ class ControlsTab {
             return
         }
         if action.hasPrefix("holdShortcut") {
-            App.app.focusTarget()
+            App.focusTarget()
             return
         }
         if action.hasPrefix("nextWindowShortcut") {
-            App.app.showUiOrCycleSelection(Preferences.nameToIndex(action), false)
+            App.showUiOrCycleSelection(Preferences.nameToIndex(action), false)
         }
     }
 }

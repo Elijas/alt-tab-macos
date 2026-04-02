@@ -1,23 +1,6 @@
 import Cocoa
 
-class BlacklistView: NSScrollView {
-    convenience init(width: CGFloat = 500, height: CGFloat = 378) {
-        self.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        borderType = .noBorder
-        hasHorizontalScroller = false
-        hasVerticalScroller = true
-        usesPredominantAxisScrolling = true
-        documentView = TableView(nil)
-        fit(width, height)
-        wantsLayer = true
-        layer!.cornerRadius = TableGroupView.cornerRadius
-        layer!.masksToBounds = true
-        contentView.wantsLayer = true
-        contentView.layer!.cornerRadius = TableGroupView.cornerRadius
-        contentView.layer!.masksToBounds = true
-    }
-
+class ForwardingVerticalScrollView: NSScrollView {
     override func wantsForwardedScrollEvents(for axis: NSEvent.GestureAxis) -> Bool {
         axis == .vertical
     }
@@ -65,8 +48,14 @@ class BlacklistView: NSScrollView {
     }
 }
 
+class ForwardingVerticalDocumentView: FlippedView {
+    override func wantsForwardedScrollEvents(for axis: NSEvent.GestureAxis) -> Bool {
+        axis == .vertical
+    }
+}
+
 class TableView: NSTableView {
-    var items = Preferences.blacklist
+    var items = Preferences.exceptions
 
     override func wantsForwardedScrollEvents(for axis: NSEvent.GestureAxis) -> Bool {
         axis == .vertical
@@ -94,7 +83,7 @@ class TableView: NSTableView {
 
     func insertRow(_ bundleId: String) {
         if !(items.contains { $0.bundleIdentifier == bundleId }) {
-            items.append(BlacklistEntry(bundleIdentifier: bundleId, hide: .always, ignore: .none, windowTitleContains: nil))
+            items.append(ExceptionEntry(bundleIdentifier: bundleId, hide: .always, ignore: .none, windowTitleContains: nil))
             insertRows(at: [numberOfRows])
             savePreferences()
         }
@@ -127,21 +116,21 @@ class TableView: NSTableView {
         if colId == "col1" {
             items[row].bundleIdentifier = LabelAndControl.getControlValue(control, nil)!
         } else if colId == "col2" {
-            items[row].hide = BlacklistHidePreference.allCases[Int(LabelAndControl.getControlValue(control, nil)!)!]
+            items[row].hide = ExceptionHidePreference.allCases[Int(LabelAndControl.getControlValue(control, nil)!)!]
         } else if colId == "col3" {
             items[row].windowTitleContains = LabelAndControl.getControlValue(control, nil)
         } else {
-            items[row].ignore = BlacklistIgnorePreference.allCases[Int(LabelAndControl.getControlValue(control, nil)!)!]
+            items[row].ignore = ExceptionIgnorePreference.allCases[Int(LabelAndControl.getControlValue(control, nil)!)!]
         }
         savePreferences()
     }
 
     private func savePreferences() {
-        Preferences.set("blacklist", items)
+        Preferences.set("exceptions", items)
     }
 
-    private func text(_ item: BlacklistEntry) -> NSView {
-        let text = TextField(item.bundleIdentifier)
+    private func editableTextCell(_ value: String, _ colId: String) -> NSView {
+        let text = TextField(value)
         text.isEditable = true
         text.allowsExpansionToolTips = true
         text.drawsBackground = false
@@ -149,7 +138,7 @@ class TableView: NSTableView {
         text.lineBreakMode = .byTruncatingTail
         text.usesSingleLineMode = true
         text.cell!.sendsActionOnEndEditing = true
-        text.onAction = { self.wasUpdated("col1", $0) }
+        text.onAction = { self.wasUpdated(colId, $0) }
         let parent = NSView()
         parent.addSubview(text)
         text.centerYAnchor.constraint(equalTo: parent.centerYAnchor).isActive = true
@@ -157,24 +146,15 @@ class TableView: NSTableView {
         return parent
     }
 
-    private func titleText(_ item: BlacklistEntry) -> NSView {
-        let text = TextField(item.windowTitleContains ?? "")
-        text.isEditable = true
-        text.allowsExpansionToolTips = true
-        text.drawsBackground = false
-        text.isBordered = false
-        text.lineBreakMode = .byTruncatingTail
-        text.usesSingleLineMode = true
-        text.cell!.sendsActionOnEndEditing = true
-        text.onAction = { self.wasUpdated("col3", $0) }
-        let parent = NSView()
-        parent.addSubview(text)
-        text.centerYAnchor.constraint(equalTo: parent.centerYAnchor).isActive = true
-        text.widthAnchor.constraint(equalTo: parent.widthAnchor).isActive = true
-        return parent
+    private func text(_ item: ExceptionEntry) -> NSView {
+        editableTextCell(item.bundleIdentifier, "col1")
     }
 
-    private func dropdown(_ item: BlacklistEntry, _ colId: String) -> NSView {
+    private func titleText(_ item: ExceptionEntry) -> NSView {
+        editableTextCell(item.windowTitleContains ?? "", "col3")
+    }
+
+    private func dropdown(_ item: ExceptionEntry, _ colId: String) -> NSView {
         let isHidePref = colId == "col2"
         let button = NSPopUpButton()
         button.translatesAutoresizingMaskIntoConstraints = false
@@ -184,7 +164,7 @@ class TableView: NSTableView {
         cell.bezelStyle = .regularSquare
         cell.arrowPosition = .arrowAtBottom
         cell.imagePosition = .imageOverlaps
-        let cases: [MacroPreference] = isHidePref ? BlacklistHidePreference.allCases : BlacklistIgnorePreference.allCases
+        let cases: [MacroPreference] = isHidePref ? ExceptionHidePreference.allCases : ExceptionIgnorePreference.allCases
         button.addItems(withTitles: cases.map { $0.localizedString })
         button.selectItem(at: isHidePref ? item.hide.index : item.ignore.index)
         button.onAction = { self.wasUpdated(colId, $0) }

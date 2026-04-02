@@ -39,7 +39,7 @@ class AppCenterCrash: NSObject {
 
     func checkIfShouldSend() -> Bool {
         if Preferences.crashPolicy == .ask {
-            App.app.activate(ignoringOtherApps: true)
+            App.shared.activate(ignoringOtherApps: true)
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = NSLocalizedString("Send a crash report?", comment: "")
@@ -51,7 +51,7 @@ class AppCenterCrash: NSObject {
             alert.accessoryView = checkbox
             let userChoice = alert.runModal()
             let id = crashButtonIdToUpdate(userChoice, checkbox)
-            if let buttons = PoliciesTab.crashPolicyDropdown, buttons.numberOfItems > id {
+            if let buttons = GeneralTab.crashPolicyDropdown, buttons.numberOfItems > id {
                 buttons.selectItem(at: id)
             }
             Preferences.set("crashPolicy", String(id))

@@ -81,13 +81,6 @@ class Application: NSObject {
         executableURL = runningApplication.executableURL
         debugId = "(pid:\(pid) \(bundleIdentifier ?? bundleURL?.absoluteString ?? executableURL?.absoluteString ?? localizedName))"
         super.init()
-        BackgroundWork.screenshotsQueue.addOperation { [weak self] in
-            guard let self else { return }
-            let r = Application.appIconWithoutPadding(runningApplication.icon)
-            DispatchQueue.main.async { [weak self] in
-                self?.icon = r
-            }
-        }
         Logger.info { self.debugId }
         observeEventsIfEligible()
         kvObservers = [
@@ -122,6 +115,17 @@ class Application: NSObject {
         }
     }
 
+    func fetchAppIcon() {
+        guard icon == nil else { return }
+        BackgroundWork.screenshotsQueue.addOperation { [weak self] in
+            guard let self, self.icon == nil else { return }
+            let r = Application.appIconWithoutPadding(runningApplication.icon)
+            DispatchQueue.main.async { [weak self] in
+                self?.icon = r
+            }
+        }
+    }
+
     private func observeEvents() {
         guard let axObserver else { return }
         AXUIElement.retryAxCallUntilTimeout(context: debugId, pid: pid, callType: .subscribeToAppNotification) { [weak self] in
@@ -142,7 +146,11 @@ class Application: NSObject {
                         // apps don't always create kAXApplicationActivatedNotification upon launch; we update frontmostPid in case it has changed
                         Applications.frontmostPid = NSWorkspace.shared.frontmostApplication?.processIdentifier
                         // apps don't always send kAXWindowCreatedNotification upon launch; we manually check to prevent missing windows
-                        self?.manuallyUpdateWindows()
+                        guard let self else { return }
+                        if addWindowlessWindowIfNeeded() != nil {
+                            App.refreshOpenUiAfterExternalEvent([])
+                        }
+                        Applications.manuallyUpdateWindows(self)
                     }
                 }
             }
@@ -150,38 +158,8 @@ class Application: NSObject {
         CFRunLoopAddSource(BackgroundWork.accessibilityEventsThread.runLoop, AXObserverGetRunLoopSource(axObserver), .commonModes)
     }
 
-    func manuallyUpdateWindows() {
-        AXUIElement.retryAxCallUntilTimeout(context: debugId, pid: pid, callType: .updateAppWindows) { [weak self] in
-            guard let self, let axUiElement = self.axUiElement else { return }
-            let axWindows = try axUiElement.allWindows(self.pid)
-            guard !axWindows.isEmpty else {
-                DispatchQueue.main.async { [weak self] in
-                    guard let self else { return }
-                    if self.addWindowlessWindowIfNeeded() != nil {
-                        App.app.refreshOpenUiAfterExternalEvent([])
-                    }
-                }
-                // workaround: some apps launch but take a while to create their window(s)
-                // initial windows don't trigger a windowCreated notification, so we won't get notified
-                // it's very unlikely an app would launch with no initial window
-                // so we retry until timeout, in those rare cases (e.g. Bear.app)
-                // we only do this for regular, active app, to avoid wasting CPU, with the trade-off of maybe missing some windows
-                if self.runningApplication.isActive && self.runningApplication.activationPolicy == .regular {
-                    throw AxError.runtimeError
-                }
-                return
-            }
-            for axWindow in axWindows {
-                guard let wid = try? axWindow.cgWindowId() else { continue }
-                AXUIElement.retryAxCallUntilTimeout(context: debugId, pid: pid, wid: wid, callType: .updateWindowFromManualDiscovery) { [weak self] in
-                    try self?.manuallyUpdateWindow(axWindow, wid)
-                }
-            }
-        }
-    }
-
     func manuallyUpdateWindow(_ axWindow: AXUIElement, _ wid: CGWindowID) throws {
-        guard wid != 0 && wid != App.app.tilesPanel.windowNumber
+        guard wid != 0 && wid != TilesPanel.shared.windowNumber
               && !SidePanelManager.shared.allWindowNumbers().contains(Int(wid))
               else { return } // some bogus "windows" have wid 0; also filter our own panels
         let level = wid.level()
@@ -192,7 +170,7 @@ class Application: NSObject {
             guard let window = findOrCreate.0 else { return }
             if findOrCreate.1 {
                 Logger.info { "manuallyUpdateWindows found a new window:\(window.debugId)" }
-                App.app.refreshOpenUiAfterExternalEvent([window])
+                App.refreshOpenUiAfterExternalEvent([window])
             }
         }
     }
@@ -204,14 +182,14 @@ class Application: NSObject {
         let window = Window(self)
         Windows.appendWindow(window)
         focusedWindow = nil
-        App.app.refreshOpenUiAfterExternalEvent([])
+        App.refreshOpenUiAfterExternalEvent([])
         return window
     }
 
     func removeWindowlessAppWindow() {
         guard let windowlessAppWindow = (Windows.list.first { $0.isWindowlessApp == true && $0.application.pid == pid }) else { return }
         Windows.removeWindows([windowlessAppWindow], false)
-        App.app.refreshOpenUiAfterExternalEvent([])
+        App.refreshOpenUiAfterExternalEvent([])
     }
 
     func hideOrShow() {

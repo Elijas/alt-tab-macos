@@ -56,7 +56,7 @@ class PreferencesEvents {
         case "nextWindowGesture": TrackpadEvents.toggle(Preferences.nextWindowGesture != .disabled)
         case "startAtLogin": applyStartAtLoginPreference()
         case "updatePolicy": applyUpdatePolicyPreference()
-        case let k where preferencesRequiringUiReset.contains(k) && App.app.tilesPanel != nil: App.app.resetPreferencesDependentComponents()
+        case let k where preferencesRequiringUiReset.contains(k) && TilesPanel.shared != nil: App.resetPreferencesDependentComponents()
         default: break
         }
     }
@@ -67,11 +67,11 @@ class PreferencesEvents {
     }
 
     private static func applyUpdatePolicyPreference() {
-        PoliciesTab.policyLock = true
+        GeneralTab.policyLock = true
         let policy = Preferences.updatePolicy
         SUUpdater.shared().automaticallyDownloadsUpdates = policy == .autoInstall
         SUUpdater.shared().automaticallyChecksForUpdates = policy == .autoInstall || policy == .autoCheck
-        PoliciesTab.policyLock = false
+        GeneralTab.policyLock = false
     }
 
     private static func applyStartAtLoginPreference() {

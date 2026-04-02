@@ -30,13 +30,14 @@ class ScrollwheelEvents {
             let runLoopSource = CFMachPortCreateRunLoopSource(nil, eventTap, 0)
             CFRunLoopAddSource(BackgroundWork.keyboardAndMouseAndTrackpadEventsThread.runLoop, runLoopSource, .commonModes)
         } else {
-            App.app.restart()
+            App.restart()
         }
     }
 
     private static let handleEvent: CGEventTapCallBack = { _, type, cgEvent, _ in
-        if type.rawValue == NSEvent.EventType.scrollWheel.rawValue {
-            // block scrolling globally
+        if type.rawValue == NSEvent.EventType.scrollWheel.rawValue,
+           cgEvent.getIntegerValueField(.scrollWheelEventIsContinuous) != 0 {
+            // block continuous (trackpad) scrolling; let discrete (mouse) scrolling through
             return nil
         } else if (type == .tapDisabledByUserInput || type == .tapDisabledByTimeout) && shouldBeEnabled {
             CGEvent.tapEnable(tap: eventTap!, enable: true)

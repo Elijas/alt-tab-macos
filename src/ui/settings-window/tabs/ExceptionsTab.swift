@@ -1,17 +1,16 @@
 import Cocoa
-import Sparkle
 
-class BlacklistsTab {
+class ExceptionsTab {
     static func initTab() -> NSView {
-        let blacklist = BlacklistView(width: SettingsWindow.contentWidth - 2 * TableGroupView.padding)
-        let tableView = blacklist.documentView as! TableView
+        let exceptions = ExceptionsView(width: SettingsWindow.contentWidth - 2 * TableGroupView.padding)
+        let tableView = exceptions.documentView as! TableView
         let addButton = makeAddButton(tableView)
         let removeButton = makeRemoveButton(tableView)
         let buttonsStack = NSStackView(views: [addButton, removeButton])
         buttonsStack.orientation = .horizontal
         buttonsStack.spacing = 2
         let table = TableGroupView(width: SettingsWindow.contentWidth)
-        _ = table.addRow(leftViews: [blacklist], secondaryViews: [buttonsStack])
+        _ = table.addRow(leftViews: [exceptions], secondaryViews: [buttonsStack])
         let view = TableGroupSetView(originalViews: [table], bottomPadding: 0)
         return view
     }
@@ -59,7 +58,7 @@ class BlacklistsTab {
         menu.addItem(runningAppsItem)
         let diskItem = NSMenuItem(title: NSLocalizedString("Add an app from disk", comment: ""), action: nil, keyEquivalent: "")
         diskItem.representedObject = tableView
-        diskItem.target = BlacklistsTab.self
+        diskItem.target = ExceptionsTab.self
         diskItem.action = #selector(addFromDisk(_:))
         menu.addItem(diskItem)
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 2), in: sender)
@@ -71,7 +70,7 @@ class BlacklistsTab {
         dialog.allowsMultipleSelection = false
         dialog.allowedFileTypes = ["app"]
         dialog.canChooseDirectories = false
-        dialog.beginSheetModal(for: App.app.settingsWindow) {
+        dialog.beginSheetModal(for: SettingsWindow.shared) {
             if $0 == .OK, let url = dialog.url, let bundleId = Bundle(url: url)?.bundleIdentifier {
                 tableView.insertRow(bundleId)
             }
@@ -93,7 +92,7 @@ class BlacklistsTab {
                 item.image = icon
             }
             item.representedObject = (tableView, bundleId)
-            item.target = BlacklistsTab.self
+            item.target = ExceptionsTab.self
             item.action = #selector(addRunningApp(_:))
             submenu.addItem(item)
         }
@@ -103,5 +102,24 @@ class BlacklistsTab {
     @objc private static func addRunningApp(_ sender: NSMenuItem) {
         guard let (tableView, bundleId) = sender.representedObject as? (TableView, String) else { return }
         tableView.insertRow(bundleId)
+    }
+}
+
+class ExceptionsView: ForwardingVerticalScrollView {
+    convenience init(width: CGFloat = 500, height: CGFloat = 378) {
+        self.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        borderType = .noBorder
+        hasHorizontalScroller = false
+        hasVerticalScroller = true
+        usesPredominantAxisScrolling = true
+        documentView = TableView(nil)
+        fit(width, height)
+        wantsLayer = true
+        layer!.cornerRadius = TableGroupView.cornerRadius
+        layer!.masksToBounds = true
+        contentView.wantsLayer = true
+        contentView.layer!.cornerRadius = TableGroupView.cornerRadius
+        contentView.layer!.masksToBounds = true
     }
 }

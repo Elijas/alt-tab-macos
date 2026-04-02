@@ -1,7 +1,11 @@
 import Cocoa
+import Sparkle
 
 class GeneralTab {
     static var menubarIconDropdown: NSPopUpButton?
+    static var updatesPolicyDropdown: NSPopUpButton?
+    static var crashPolicyDropdown: NSPopUpButton?
+    static var policyLock = false
     private static var menubarIsVisibleObserver: NSKeyValueObservation?
 
     static func initTab() -> NSView {
@@ -16,6 +20,12 @@ class GeneralTab {
             ])
         let language = TableGroupView.Row(leftTitle: NSLocalizedString("Language", comment: ""),
             rightViews: [LabelAndControl.makeDropdown("language", LanguagePreference.allCases, extraAction: setLanguageCallback)])
+        updatesPolicyDropdown = LabelAndControl.makeDropdown("updatePolicy", UpdatePolicyPreference.allCases)
+        let updatesPolicy = TableGroupView.Row(leftTitle: NSLocalizedString("Updates policy", comment: ""),
+            rightViews: [updatesPolicyDropdown!])
+        crashPolicyDropdown = LabelAndControl.makeDropdown("crashPolicy", CrashPolicyPreference.allCases)
+        let crashPolicy = TableGroupView.Row(leftTitle: NSLocalizedString("Crash reports policy", comment: ""),
+            rightViews: [crashPolicyDropdown!])
         for i in 0..<MenubarIconPreference.allCases.count {
             let image = NSImage.initCopy("menubar-\(i)")
             image.isTemplate = i < 2
@@ -26,16 +36,25 @@ class GeneralTab {
         cell.arrowPosition = .arrowAtBottom
         cell.imagePosition = .imageOverlaps
         enableDraggingOffMenubarIcon(menuIconShownToggle)
+        let captureWindowsInBackground = TableGroupView.Row(leftTitle: NSLocalizedString("Capture windows in the background", comment: ""),
+            subTitle: NSLocalizedString("When disabled, avoids the macOS purple screen-recording indicator, and avoids flickers when playing DRM video. Thumbnails will be less up-to-date.", comment: ""),
+            rightViews: [LabelAndControl.makeSwitch("captureWindowsInBackground")])
         let table = TableGroupView(width: SettingsWindow.contentWidth)
         table.addRow(startAtLogin)
         table.addRow(menubarIcon)
+        table.addRow(captureWindowsInBackground)
         table.addNewTable()
         table.addRow(language)
-        let exportButton = NSButton(title: NSLocalizedString("Export…", comment: ""), target: nil, action: nil)
+        table.addNewTable()
+        table.addRow(updatesPolicy)
+        table.addRow(crashPolicy)
+        let exportButton = NSButton(title: NSLocalizedString("Export settings…", comment: ""), target: nil, action: nil)
         exportButton.onAction = { _ in exportSettings() }
-        let importButton = NSButton(title: NSLocalizedString("Import…", comment: ""), target: nil, action: nil)
+        let importButton = NSButton(title: NSLocalizedString("Import settings…", comment: ""), target: nil, action: nil)
         importButton.onAction = { _ in importSettings() }
-        let tools = StackView([exportButton, importButton], .horizontal)
+        let checkForUpdates = NSButton(title: NSLocalizedString("Check for updates now…", comment: ""), target: nil, action: nil)
+        checkForUpdates.onAction = { control in checkForUpdatesNow(control) }
+        let tools = StackView([exportButton, importButton, checkForUpdates], .horizontal)
         let view = TableGroupSetView(originalViews: [table, tools], bottomPadding: 0)
         return view
     }
@@ -43,11 +62,14 @@ class GeneralTab {
     static func refreshControlsFromPreferences() {
         menubarIconDropdown?.selectItem(at: CachedUserDefaults.intFromMacroPref("menubarIcon", MenubarIconPreference.allCases))
         menubarIconDropdown?.isEnabled = Preferences.menubarIconShown
+        updatesPolicyDropdown?.selectItem(at: CachedUserDefaults.intFromMacroPref("updatePolicy", UpdatePolicyPreference.allCases))
+        crashPolicyDropdown?.selectItem(at: CachedUserDefaults.intFromMacroPref("crashPolicy", CrashPolicyPreference.allCases))
     }
 
     private static func enableDraggingOffMenubarIcon(_ menuIconShownToggle: Switch) {
         Menubar.statusItem.behavior = .removalAllowed
         menubarIsVisibleObserver = Menubar.statusItem.observe(\.isVisible, options: [.old, .new]) { _, change in
+            Logger.debug { "---- \(change)" }
             if change.oldValue == true && change.newValue == false {
                 menuIconShownToggle.state = .off
                 LabelAndControl.controlWasChanged(menuIconShownToggle, nil)
@@ -65,8 +87,12 @@ class GeneralTab {
         if #available(macOS 11.0, *) { resetButton.hasDestructiveAction = true }
         if alert.runModal() == .alertSecondButtonReturn {
             Preferences.resetAll()
-            App.app.restart()
+            App.restart()
         }
+    }
+
+    @objc static func checkForUpdatesNow(_ sender: Any?) {
+        SUUpdater.shared().checkForUpdates(sender)
     }
 
     private static func exportSettings() {
@@ -98,7 +124,7 @@ class GeneralTab {
         alert.addButton(withTitle: NSLocalizedString("Restart Now", comment: ""))
         alert.addButton(withTitle: NSLocalizedString("Later", comment: ""))
         if alert.runModal() == .alertFirstButtonReturn {
-            App.app.restart()
+            App.restart()
         }
     }
 
@@ -116,7 +142,7 @@ class GeneralTab {
         alert.addButton(withTitle: NSLocalizedString("Restart Now", comment: ""))
         alert.addButton(withTitle: NSLocalizedString("Later", comment: ""))
         if alert.runModal() == .alertFirstButtonReturn {
-            App.app.restart()
+            App.restart()
         }
     }
 }

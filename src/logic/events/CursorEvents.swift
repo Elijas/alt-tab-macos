@@ -4,8 +4,7 @@ import Carbon.HIToolbox.Events
 class CursorEvents {
     private static var eventTap: CFMachPort!
     private static var shouldBeEnabled: Bool!
-    private static var mouseDownTileView: TileView?
-    private static var mouseDownButton: TrafficLightButton?
+    private static var mouseDownTarget: AnyObject?
     private static var mouseDownInsideSearchField = false
     static var deadZoneInitialPosition: CGPoint?
     static var isAllowedToMouseHover = true
@@ -26,7 +25,7 @@ class CursorEvents {
     }
 
     private static func observe_() {
-        let eventMask = [CGEventType.leftMouseDown, CGEventType.leftMouseUp, CGEventType.otherMouseUp, CGEventType.mouseMoved].reduce(CGEventMask(0), { $0 | (1 << $1.rawValue) })
+        let eventMask = [CGEventType.leftMouseDown, CGEventType.leftMouseUp, CGEventType.rightMouseDown, CGEventType.rightMouseUp, CGEventType.otherMouseDown, CGEventType.otherMouseUp, CGEventType.mouseMoved].reduce(CGEventMask(0), { $0 | (1 << $1.rawValue) })
         // CGEvent.tapCreate returns nil if ensureAccessibilityCheckboxIsChecked() didn't pass
         eventTap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
@@ -41,14 +40,17 @@ class CursorEvents {
             // we run on main-thread directly since all we do is check NSEvent and UI coordinates, which we must do on main-thread
             CFRunLoopAddSource(CFRunLoopGetMain(), runLoopSource, .commonModes)
         } else {
-            App.app.restart()
+            App.restart()
         }
     }
 
     private static let handleEvent: CGEventTapCallBack = { _, type, cgEvent, _ in
         switch type {
             case .leftMouseDown: return handleLeftMouseDown(cgEvent)
-            case .leftMouseUp where cgEvent.getIntegerValueField(.mouseEventClickState) >= 1: return handleLeftMouseUp(cgEvent)
+            case .leftMouseUp: return handleLeftMouseUp(cgEvent)
+            case .rightMouseDown: return handleRightMouseDown(cgEvent)
+            case .rightMouseUp: return handleRightMouseUp(cgEvent)
+            case .otherMouseDown: return handleOtherMouseDown(cgEvent)
             case .otherMouseUp: return handleOtherMouseUp(cgEvent)
             case .mouseMoved: return handleMouseMoved(cgEvent)
             case .tapDisabledByUserInput, .tapDisabledByTimeout:
@@ -59,90 +61,101 @@ class CursorEvents {
     }
 
     private static func handleLeftMouseDown(_ cgEvent: CGEvent) -> Unmanaged<CGEvent>? {
+        if TilesView.hasMarkedText() || ContextMenuEvents.isMenuOpen { return Unmanaged.passUnretained(cgEvent) }
         if isPointerInsideSearchField() {
             mouseDownInsideSearchField = true
             return Unmanaged.passUnretained(cgEvent)
         }
         mouseDownInsideSearchField = false
         guard isPointerInsideUi() else { return nil }
-        if let button = findButtonUnderPointer() {
-            mouseDownButton = button
-            button.isHighlighted = true
-            button.setNeedsDisplay()
-        } else {
-            mouseDownTileView = findTileViewUnderPointer()
-        }
+        mouseDownTarget = (findButtonUnderPointer() ?? findTileViewUnderPointer()) as AnyObject?
         return nil
     }
 
     private static func handleLeftMouseUp(_ cgEvent: CGEvent) -> Unmanaged<CGEvent>? {
+        if TilesView.hasMarkedText() || ContextMenuEvents.isMenuOpen { return Unmanaged.passUnretained(cgEvent) }
         if mouseDownInsideSearchField || isPointerInsideSearchField() {
             mouseDownInsideSearchField = false
             return Unmanaged.passUnretained(cgEvent)
         }
         guard isPointerInsideUi() else {
-            App.app.hideUi()
+            if mouseDownTarget == nil { App.hideUi() }
+            mouseDownTarget = nil
             return nil
         }
-        if let button = mouseDownButton {
-            mouseDownButton = nil
-            button.isHighlighted = false
-            button.setNeedsDisplay()
-            if findButtonUnderPointer() === button {
-                button.onClick()
-            }
+        let downTarget = mouseDownTarget
+        mouseDownTarget = nil
+        if let button = findButtonUnderPointer(), button === downTarget {
+            button.onClick()
             return nil
         }
-        if let target = mouseDownTileView {
-            mouseDownTileView = nil
-            if isPointerOver(target) {
-                target.mouseUpCallback()
-            }
+        if let target = findTileViewUnderPointer(), target === downTarget {
+            target.mouseUpCallback()
             return nil
         }
+        return nil
+    }
+
+    private static func handleRightMouseDown(_ cgEvent: CGEvent) -> Unmanaged<CGEvent>? {
+        if ContextMenuEvents.isMenuOpen || isPointerInsideUi() { return Unmanaged.passUnretained(cgEvent) }
+        return nil
+    }
+
+    private static func handleRightMouseUp(_ cgEvent: CGEvent) -> Unmanaged<CGEvent>? {
+        if ContextMenuEvents.isMenuOpen || isPointerInsideUi() { return Unmanaged.passUnretained(cgEvent) }
+        return nil
+    }
+
+    private static func handleOtherMouseDown(_ cgEvent: CGEvent) -> Unmanaged<CGEvent>? {
+        if ContextMenuEvents.isMenuOpen || isPointerInsideUi() { return Unmanaged.passUnretained(cgEvent) }
         return nil
     }
 
     private static func handleOtherMouseUp(_ cgEvent: CGEvent) -> Unmanaged<CGEvent>? {
-        guard isPointerInsideUi(),
-              cgEvent.getIntegerValueField(.mouseEventButtonNumber) == 2,
-              let target = findTileViewUnderPointer(),
-              let window = target.window_ else {
-            return Unmanaged.passUnretained(cgEvent)
+        if ContextMenuEvents.isMenuOpen { return Unmanaged.passUnretained(cgEvent) }
+        if isPointerInsideUi(),
+           cgEvent.getIntegerValueField(.mouseEventButtonNumber) == 2,
+           let target = findTileViewUnderPointer(),
+           let window = target.window_ {
+            window.isWindowlessApp ? window.application.quit() : window.close()
         }
-        window.isWindowlessApp ? window.application.quit() : window.close()
         return nil
     }
 
     private static func handleMouseMoved(_ cgEvent: CGEvent) -> Unmanaged<CGEvent>? {
-        updateDeadzoneSituation(cgEvent)
-        if isAllowedToMouseHover {
-            App.app.tilesPanel.tilesView.thumbnailOverView.updateHover()
+        if isAllowedToReactToPointerMovement(cgEvent.location) {
+            TilesView.thumbnailOverView.updateHover()
         }
         return Unmanaged.passUnretained(cgEvent)
     }
 
+    static func resetDeadzone() {
+        deadZoneInitialPosition = nil
+        isAllowedToMouseHover = false
+    }
+
+    static func isAllowedToReactToPointerMovement(_ location: CGPoint) -> Bool {
+        updateDeadzoneSituation(location)
+        return isAllowedToMouseHover
+    }
+
     private static func pointerLocationInWindow() -> NSPoint {
-        App.app.tilesPanel.mouseLocationOutsideOfEventStream
+        TilesPanel.shared.mouseLocationOutsideOfEventStream
     }
 
     private static func isPointerInsideUi() -> Bool {
-        App.app.tilesPanel.contentLayoutRect.contains(pointerLocationInWindow())
+        TilesPanel.shared.contentLayoutRect.contains(pointerLocationInWindow())
     }
 
     private static func isPointerInsideSearchField() -> Bool {
-        let searchField = App.app.tilesPanel.tilesView.searchField
+        let searchField = TilesView.searchField
         if searchField.isHidden { return false }
         let point = searchField.convert(pointerLocationInWindow(), from: nil)
         return searchField.bounds.contains(point)
     }
 
-    private static func isPointerOver(_ view: NSView) -> Bool {
-        view.bounds.contains(view.convert(pointerLocationInWindow(), from: nil))
-    }
-
     private static func pointerInOverlay() -> (TileOverView, NSPoint) {
-        let overlay = App.app.tilesPanel.tilesView.thumbnailOverView
+        let overlay = TilesView.thumbnailOverView
         return (overlay, overlay.convert(pointerLocationInWindow(), from: nil))
     }
 
@@ -158,15 +171,14 @@ class CursorEvents {
 
     /// when using the trackpad, the user may swipe with a slight mistake. This will create a small cursor movement
     /// we ignore those, as they are not intended. Intended movements will be larger and not ignored
-    private static func updateDeadzoneSituation(_ cgEvent: CGEvent) {
-        guard let event = cgEvent.toNSEvent() else { return }
+    private static func updateDeadzoneSituation(_ location: CGPoint) {
         guard let deadZoneInitialPosition else {
-            deadZoneInitialPosition = event.locationInWindow
+            deadZoneInitialPosition = location
             isAllowedToMouseHover = false
             return
         }
-        let deltaX = event.locationInWindow.x - deadZoneInitialPosition.x
-        let deltaY = event.locationInWindow.y - deadZoneInitialPosition.y
+        let deltaX = location.x - deadZoneInitialPosition.x
+        let deltaY = location.y - deadZoneInitialPosition.y
         if hypot(deltaX, deltaY) > 25 { isAllowedToMouseHover = true }
     }
 }

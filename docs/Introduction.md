@@ -31,24 +31,9 @@ Alternative Styles
 * Drag-and-drop things on top of window thumbnails
 * Accessibility: VoiceOver, sticky keys, reduced transparency, etc
 
-## Compatibility
+## FAQ
 
-* __macOS version:__ from 10.12 to latest
-* __Apple Silicon:__ yes, AltTab is [universal](https://developer.apple.com/documentation/apple-silicon/porting-your-macos-apps-to-apple-silicon)
-
-## Localization
-
-AltTab is available in many languages: Bahasa Indonesia, Basa Jawa, Català, Čeština, Dansk, Deutsch, Eesti keel, English, Español, Français, Gaeilge, Galego, Hrvatski, Íslenska, Italiano, Kurdî, Lietuvių, Lëtzebuergesch, Magyar, Nederlands, Norsk Bokmål, Norsk Nynorsk, Oʻzbekcha, Polski, Português, Português (Brasil), Română, Shqip, Slovenčina, Slovenščina, Suomi, Svenska, Tiếng Việt, Türkçe, Беларуская мова, Български, Русский, Српски, Українська, Ελληνικά, עִבְרִית, العربية, فارسی, हिन्दी, বাংলা, ગુજરાતી, தமிழ், ಕನ್ನಡ, മലയാളം, ภาษาไทย, မြန်မာဘာသာ, 日本語, 简体中文, 繁體中文, 繁體中文 (香港), 한국어
-
-[Contribute your own language easily!](https://poeditor.com/join/project/8AOEZ0eAZE)
-
-## Privacy
-
-AltTab doesn’t communicate to any server for so-called telemetry. AltTab will only use the network if it's absolutely required (e.g. checking for updates).
-
-## Performance
-
-AltTab has been designed to take as few resources as possible on the user computer. The app itself is kept as small as possible. CPU usage is kept to a minimum, especially while in the background. The goal is to respect the user and try to have no negative impact on their experience.
+Find [Frequently Asked Questions on GitHub](https://github.com/lwouis/alt-tab-macos/discussions/categories/frequently-asked-questions?discussions_q=category%3A%22Frequently+Asked+Questions%22+).
 
 ## Configuration
 
@@ -62,6 +47,23 @@ Change the shortcut keys, switch to a Windows theme and more, using the Settings
     <a href="public/demo/preferences-blacklist.jpg"><img loading="lazy" src="public/demo/preferences-blacklist.jpg" alt="Screenshot: Blacklist preferences" width="672" height="655" style="width:100%; height:auto; max-width:330px;" /></a>
     <a href="public/demo/preferences-policies.jpg"><img loading="lazy" src="public/demo/preferences-policies.jpg" alt="Screenshot: Policies preferences" width="672" height="353" style="width:100%; height:auto; max-width:330px;" /></a>
 </div>
+
+## Compatibility
+
+* __macOS version:__ from 10.12 to latest
+* __Apple Silicon:__ yes, AltTab is [universal](https://developer.apple.com/documentation/apple-silicon/porting-your-macos-apps-to-apple-silicon)
+
+## Localization
+
+AltTab is available in many languages: Bahasa Indonesia, Basa Jawa, Català, Čeština, Dansk, Deutsch, Eesti keel, English, Español, Français, Gaeilge, Galego, Hrvatski, Íslenska, Italiano, Kurdî, Lietuvių, Lëtzebuergesch, Magyar, Nederlands, Norsk Bokmål, Norsk Nynorsk, Oʻzbekcha, Polski, Português, Português (Brasil), Română, Shqip, Slovenčina, Slovenščina, Suomi, Svenska, Tiếng Việt, Türkçe, Беларуская мова, Български, Русский, Српски, Українська, Қазақ тілі, Ελληνικά, עִבְרִית ,اردو ,العربية ,فارسی, मराठी, हिन्दी, বাংলা, ગુજરાતી, தமிழ், ಕನ್ನಡ, മലയാളം, ภาษาไทย, မြန်မာဘာသာ, 日本語, 简体中文, 繁體中文, 繁體中文 (香港), 한국어
+
+[Contribute your own language easily!](https://poeditor.com/join/project/8AOEZ0eAZE)
+
+## Privacy
+
+AltTab doesn’t communicate to any server for so-called telemetry. AltTab will only use the network if it's absolutely required (e.g. checking for updates).
+
+AltTab has been designed to take as few resources as possible on the user computer. The app itself is kept as small as possible. CPU usage is kept to a minimum, especially while in the background. The goal is to respect the user and try to have no negative impact on their experience.
 
 ## CLI usage
 
@@ -91,7 +93,3 @@ Before building my own app, I looked around at similar apps. However, none was c
 | Built-in `⌘ command` + `` ` ``                                                              | Cycles through tabs and windows, but only of the same app. Only cycling, no direct access                    |
 
 There are also related apps which don’t really overlap in functionality, but target similar needs: [Swish](https://highlyopinionated.co/swish/), [Hookshot](https://hookshot.app/), [Magnet](https://magnet.crowdcafe.com/), [Spectacle](https://www.spectacleapp.com/), [Rectangle](https://github.com/rxhanson/Rectangle), [yabai](https://github.com/koekeishiya/yabai), [LayAuto](https://layautoapp.com/), [BetterTouchTool](https://folivora.ai/), [BetterSnapTool](https://folivora.ai/bettersnaptool), [Moom](https://manytricks.com/moom/), [uBar](https://brawersoftware.com/products/ubar).
-
-## License
-
-AltTab is under the [GPL-3.0 license](https://github.com/lwouis/alt-tab-macos/blob/master/LICENCE.md). 

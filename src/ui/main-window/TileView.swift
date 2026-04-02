@@ -17,9 +17,7 @@ class TileView: FlippedView {
 
     var mouseUpCallback: (() -> Void)!
     var mouseMovedCallback: (() -> Void)!
-    var dragAndDropTimer: Timer?
     var indexInRecycledViews: Int!
-    private var lastDragLocation: NSPoint?
 
     var isFirstInRow = false
     var isLastInRow = false
@@ -31,57 +29,6 @@ class TileView: FlippedView {
     override var acceptsFirstResponder: Bool { true }
 
     override func isAccessibilityElement() -> Bool { true }
-
-    override func wantsPeriodicDraggingUpdates() -> Bool { false }
-
-    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
-        let location = sender.draggingLocation
-        if location != lastDragLocation {
-            lastDragLocation = location
-            mouseMovedCallback()
-        }
-        return .link
-    }
-
-    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
-        lastDragLocation = sender.draggingLocation
-        mouseMovedCallback()
-        setDraggingTimer()
-        return .link
-    }
-
-    private func setDraggingTimer() {
-        dragAndDropTimer?.invalidate()
-        dragAndDropTimer = Timer(timeInterval: 2, repeats: false, block: { [weak self] _ in
-            guard let self else { return }
-            // the user can tab to focus the next thumbnail, while still dragging. We don't want to perform drag then
-            if Windows.selectedWindowIndex == Windows.hoveredWindowIndex {
-                self.mouseUpCallback()
-            }
-        })
-        dragAndDropTimer?.tolerance = 0.2
-        if let dragAndDropTimer {
-            // we need to target .common since dragging is running in .eventTracking on trackpad
-            RunLoop.main.add(dragAndDropTimer, forMode: .common)
-        }
-    }
-
-    override func draggingExited(_ sender: NSDraggingInfo?) {
-        lastDragLocation = nil
-        dragAndDropTimer?.invalidate()
-        dragAndDropTimer = nil
-        App.app.tilesPanel.tilesView.thumbnailOverView.resetHoveredWindow()
-    }
-
-    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
-        dragAndDropTimer?.invalidate()
-        dragAndDropTimer = nil
-        let urls = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self]) as! [URL]
-        let appUrl = window_!.application.bundleURL!
-        let open = try? NSWorkspace.shared.open(urls, withApplicationAt: appUrl, options: [], configuration: [:])
-        App.app.hideUi()
-        return open != nil
-    }
 
     func mouseMoved() {
         updateLabelTooltipIfNeeded()
@@ -96,7 +43,6 @@ class TileView: FlippedView {
     convenience init() {
         self.init(frame: .zero)
         setupView()
-        observeDragAndDrop()
     }
 
     /// The frame used by TileUnderLayer to position the highlight rectangle.
@@ -253,8 +199,8 @@ class TileView: FlippedView {
             isFullscreen: element.isFullscreen && !Preferences.hideStatusIcons,
             isMinimized: element.isMinimized && !Preferences.hideStatusIcons,
             showSpace: !(element.isWindowlessApp || Spaces.isSingleSpace() || Preferences.hideSpaceNumberLabels || (
-                Preferences.spacesToShow[App.app.shortcutIndex] == .visible && (
-                    NSScreen.screens.count < 2 || Preferences.screensToShow[App.app.shortcutIndex] == .showingAltTab
+                Preferences.spacesToShow[App.shortcutIndex] == .visible && (
+                    NSScreen.screens.count < 2 || Preferences.screensToShow[App.shortcutIndex] == .showingAltTab
                 )
             ))
         )
@@ -288,7 +234,7 @@ class TileView: FlippedView {
         updateAppIcon(element, title)
         updateDockLabelIcon(element.dockLabel)
         setAccessibilityHelp(getAccessibilityHelp(element.application.localizedName, element.dockLabel))
-        mouseUpCallback = { () -> Void in App.app.focusSelectedWindow(element) }
+        mouseUpCallback = { () -> Void in App.focusSelectedWindow(element) }
         mouseMovedCallback = { () -> Void in Windows.updateSelectedAndHoveredWindowIndex(index, true) }
     }
 
@@ -567,11 +513,6 @@ class TileView: FlippedView {
             return "Red badge with number \(dockLabelInt)"
         }
         return "Red badge"
-    }
-
-    private func observeDragAndDrop() {
-        // we only handle URLs (i.e. not text, image, or other draggable things)
-        registerForDraggedTypes([NSPasteboard.PasteboardType(kUTTypeURL as String)])
     }
 
     static func makeShadow(_ color: NSColor?) -> NSShadow? {

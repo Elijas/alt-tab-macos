@@ -57,6 +57,8 @@ class Window {
         // the app may have timed out trying to subscribe to app notifications
         // It may be responsive now since it has a window; we attempt again
         application.observeEventsIfEligible()
+        // fetch app icon only if we display that app in the switcher
+        application.fetchAppIcon()
         checkIfFocused()
         Logger.info { self.debugId }
         observeEvents()
@@ -69,6 +71,8 @@ class Window {
         Window.globalCreationCounter += 1
         creationOrder = Window.globalCreationCounter
         debugId = "\(application.debugId) (title:\(title))"
+        // fetch app icon only if we display that app in the switcher
+        application.fetchAppIcon()
         Logger.debug { self.debugId }
     }
 
@@ -110,19 +114,19 @@ class Window {
 
     func refreshThumbnail(_ screenshot: CALayerContents) {
         thumbnail = screenshot
-        if !App.app.appIsBeingUsed || !shouldShowTheUser { return }
+        if !App.appIsBeingUsed || !shouldShowTheUser { return }
         if let position, let size,
            let view = (TilesView.recycledViews.first { $0.window_?.cgWindowId == cgWindowId }) {
             if !view.thumbnail.isHidden {
-                let thumbnailSize = TileView.thumbnailSize(screenshot.size(), false)
+                let thumbnailSize = TileView.thumbnailSize(size, false)
                 let newSize = thumbnailSize.width != view.thumbnail.frame.width || thumbnailSize.height != view.thumbnail.frame.height
                 view.thumbnail.updateContents(screenshot, thumbnailSize)
                 // if the thumbnail size has changed, we need to refresh the open UI
                 if newSize {
-                    App.app.refreshOpenUiAfterExternalEvent([])
+                    App.refreshOpenUiAfterExternalEvent([])
                 }
             }
-            App.app.previewPanel.updateIfShowing(cgWindowId, screenshot, position, size)
+            PreviewPanel.updateIfShowing(cgWindowId, screenshot, position, size)
         }
     }
 
@@ -349,22 +353,26 @@ class Window {
 
     private func altTabWindow() -> NSWindow? {
         if application.bundleURL == App.bundleURL, let cgWindowId {
-            return App.app.window(withWindowNumber: Int(cgWindowId))
+            return App.shared.window(withWindowNumber: Int(cgWindowId))
         }
         return nil
     }
 
-    /// some apps will not trigger AXApplicationActivated, where we usually update application.focusedWindow
-    /// workaround: we check and possibly do it here
+    /// Scenarios addressed by this:
+    /// * Some apps will not trigger AXApplicationActivated, where we usually update application.focusedWindow
+    /// * Sometimes, we subscribe to an app after it has emitted the focusedWindow / applicationActivated events, so we never receive these
     private func checkIfFocused() {
         let app = application
         guard let appAxUiElement = app.axUiElement else { return }
-        AXUIElement.retryAxCallUntilTimeout(context: debugId, pid: app.pid, wid: cgWindowId, callType: .updateAppFocusedWindow) { [weak app] in
+        AXUIElement.retryAxCallUntilTimeout(context: debugId, pid: app.pid, wid: cgWindowId, callType: .updateAppFocusedWindowFromWindowInit) { [weak app] in
             guard let app, let focusedWindow = try appAxUiElement.attributes([kAXFocusedWindowAttribute]).focusedWindow else { return }
             let focusedWid = try focusedWindow.cgWindowId()
             DispatchQueue.main.async {
                 guard let window = (Windows.list.first { $0.isEqualRobust(focusedWindow, focusedWid) }) else { return }
                 app.focusedWindow = window
+                if let windows = Windows.updateLastFocusOrder(window) {
+                    App.refreshOpenUiAfterExternalEvent(windows)
+                }
             }
         }
     }

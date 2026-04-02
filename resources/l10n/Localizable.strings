@@ -134,10 +134,10 @@
 "Auto-install updates periodically" = "Auto-install updates periodically";
 
 /* No comment provided by engineer. */
-"Blacklists" = "Blacklists";
+"Cancel" = "Cancel";
 
 /* No comment provided by engineer. */
-"Cancel" = "Cancel";
+"Capture windows in the background" = "Capture windows in the background";
 
 /* No comment provided by engineer. */
 "Center" = "Center";
@@ -200,7 +200,10 @@
 "End" = "End";
 
 /* No comment provided by engineer. */
-"Export…" = "Export…";
+"Exceptions" = "Exceptions";
+
+/* No comment provided by engineer. */
+"Export settings…" = "Export settings…";
 
 /* No comment provided by engineer. */
 "Fade in animation of Preview" = "Fade in animation of Preview";
@@ -257,7 +260,7 @@
 "Ignore shortcuts when active" = "Ignore shortcuts when active";
 
 /* No comment provided by engineer. */
-"Import…" = "Import…";
+"Import settings…" = "Import settings…";
 
 /* No comment provided by engineer. */
 "Keep open" = "Keep open";
@@ -314,6 +317,9 @@
 "Never send crash reports" = "Never send crash reports";
 
 /* No comment provided by engineer. */
+"No Window" = "No Window";
+
+/* No comment provided by engineer. */
 "Non-active apps" = "Non-active apps";
 
 /* No comment provided by engineer. */
@@ -345,9 +351,6 @@
 
 /* No comment provided by engineer. */
 "Please fill in the form" = "Please fill in the form";
-
-/* No comment provided by engineer. */
-"Policies" = "Policies";
 
 /* No comment provided by engineer. */
 "Preview selected window" = "Preview selected window";
@@ -589,6 +592,9 @@
 
 /* No comment provided by engineer. */
 "Visible Spaces" = "Visible Spaces";
+
+/* No comment provided by engineer. */
+"When disabled, avoids the macOS purple screen-recording indicator, and avoids flickers when playing DRM video. Thumbnails will be less up-to-date." = "When disabled, avoids the macOS purple screen-recording indicator, and avoids flickers when playing DRM video. Thumbnails will be less up-to-date.";
 
 /* No comment provided by engineer. */
 "When fullscreen" = "When fullscreen";

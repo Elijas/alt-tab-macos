@@ -13,13 +13,6 @@ extension AXUIElement {
     private static let globalMessagingTimeoutInSeconds = Float(1)
     // if an app times out our AX calls, we retry for 6s then give up
     private static let axCallsRetriesQueueTimeoutInSeconds = Float(6)
-    private static var throttleMap = ConcurrentMap<String, ThrottleState>()
-
-    private struct ThrottleState {
-        let time: UInt64
-        var tailScheduled: Bool
-    }
-
     static func setGlobalTimeout() {
         AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), globalMessagingTimeoutInSeconds)
     }
@@ -35,17 +28,9 @@ extension AXUIElement {
     /// if the window server is busy, it may not reply to AX calls. We retry right before the call times-out and returns a bogus value
     static func retryAxCallUntilTimeout(file: String = #file, function: String = #function, line: Int = #line, context: String = "", after: DispatchTime? = nil, pid: pid_t? = nil, wid: CGWindowID? = nil, retriesQueue: Bool = false, startTimeInNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds, callType: AXCallType, block: @escaping () throws -> Void) {
         let closure = { retryAxCallUntilTimeout_(file: file, function: function, line: line, context: context, after: after, pid: pid, wid: wid, retriesQueue: retriesQueue, startTimeInNanoseconds: startTimeInNanoseconds, callType: callType, block: block) }
-        let queue = (callType == .updateAppWindows ? BackgroundWork.axCallsManualDiscoveryQueue
+        let queue = (callType == .updateAppWindowsFromManualDiscovery ? BackgroundWork.axCallsManualDiscoveryQueue
             : (retriesQueue ? BackgroundWork.axCallsRetriesQueue
                 : BackgroundWork.axCallsFirstAttemptQueue))!
-        if callType == .updateWindowFromAxEvent || callType == .updateWindowFromManualDiscovery {
-            guard let wid else { Logger.error { (callType, context, file, function, line) }; return }
-            if throttleOrProceed(key: "\(callType.rawValue)-wid-\(wid)", queue: queue, closure: closure) { return }
-        }
-        if callType == .updateApp || callType == .updateAppWindows || callType == .updateAppFocusedWindow {
-            guard let pid else { Logger.error { (callType, context, file, function, line) }; return }
-            if throttleOrProceed(key: "\(callType.rawValue)-pid-\(pid)", queue: queue, closure: closure) { return }
-        }
         if let after {
             queue.addOperationAfter(deadline: after, block: closure)
         } else {
@@ -73,30 +58,6 @@ extension AXUIElement {
         return "Context: \((file as NSString).lastPathComponent):\(line) \(function) \(String(describing: callType)) \(context)"
     }
 
-    private static func throttleOrProceed(key: String, queue: LabeledOperationQueue, closure: @escaping () -> Void) -> Bool {
-        let windowNs: UInt64 = 1_000_000_000
-        return throttleMap.withLock { map in
-            let now = DispatchTime.now().uptimeNanoseconds
-            if let state = map[key] {
-                let elapsed = now >= state.time ? (now - state.time) : windowNs // treat “time in future” as throttled
-                if elapsed < windowNs {
-                    if !state.tailScheduled {
-                        map[key] = ThrottleState(time: state.time, tailScheduled: true)
-
-                        let remaining = windowNs - elapsed
-                        queue.addOperationAfter(deadline: .now() + .nanoseconds(Int(remaining))) {
-                            throttleMap.withLock { $0[key] = nil }
-                            closure()
-                        }
-                    }
-                    return true
-                }
-            }
-            map[key] = ThrottleState(time: now, tailScheduled: false)
-            return false
-        }
-    }
-
     @discardableResult
     func subscribeToNotification(_ axObserver: AXObserver, _ notification: String, _ callback: (() -> Void)? = nil) throws -> Bool {
         let result = AXObserverAddNotification(axObserver, self, notification as CFString, nil)
@@ -115,26 +76,18 @@ extension AXUIElement {
         case subscribeToAppNotification
         case subscribeToWindowNotification
         case subscribeToDockNotification
-        case updateWindowFromAxEvent
+
+        case updateAppWindowsFromManualDiscovery
         case updateWindowFromManualDiscovery
-        case updateApp
-        case updateAppFocusedWindow
-        case updateAppWindows
-        case updateDockBadges
-        case axEventEntrypoint
+
+        case entrypointFromAxEvent
+        case updateWindowFromAxEvent
+        case updateAppFromAxEvent
+
+        case updateAppFocusedWindowFromWindowInit
+        case updateDockBadgesFromShowingUi
     }
 
-    final class ConcurrentMap<K: Hashable, V> {
-        private var map = [K: V]()
-        private let lock = NSLock()
-
-        @discardableResult
-        func withLock<T>(_ block: (inout [K: V]) -> T) -> T {
-            lock.lock()
-            defer { lock.unlock() }
-            return block(&map)
-        }
-    }
 }
 
 /// Attributes

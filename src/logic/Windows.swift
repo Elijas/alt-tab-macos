@@ -23,7 +23,7 @@ class Windows {
         let previousTrimmedQuery = Search.normalizedQuery(searchQuery)
         let newTrimmedQuery = Search.normalizedQuery(query)
         searchQuery = query
-        guard App.app.appIsBeingUsed else {
+        guard App.appIsBeingUsed else {
             shouldSelectBestMatchOnSearchChange = false
             shouldRestoreDefaultSelectionOnSearchClear = false
             sort()
@@ -37,7 +37,6 @@ class Windows {
                 shouldSelectBestMatchOnSearchChange = true
                 shouldRestoreDefaultSelectionOnSearchClear = false
                 hoveredWindowIndex = nil
-                selectedWindowTarget = nil
             }
         }
         sort()
@@ -63,31 +62,31 @@ class Windows {
     }
 
     static func voiceOverWindow(_ windowIndex: Int = selectedWindowIndex) {
-        guard App.app.appIsBeingUsed && App.app.tilesPanel.isKeyWindow else { return }
-        if App.app.tilesPanel.tilesView.isSearchEditing { return }
+        guard App.appIsBeingUsed && TilesPanel.shared.isKeyWindow else { return }
+        if TilesView.isSearchEditing { return }
         // it seems that sometimes makeFirstResponder is called before the view is visible
         // and it creates a delay in showing the main window; calling it with some delay seems to work around this
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(10)) {
-            if App.app.tilesPanel.tilesView.isSearchEditing { return }
+            if TilesView.isSearchEditing { return }
             let window = TilesView.recycledViews[windowIndex]
             if window.window_ != nil && window.window != nil {
-                App.app.tilesPanel.makeFirstResponder(window)
+                TilesPanel.shared.makeFirstResponder(window)
             }
         }
     }
 
     static func previewSelectedWindowIfNeeded() {
-        if App.app.appIsBeingUsed && ScreenRecordingPermission.status == .granted
+        if App.appIsBeingUsed && ScreenRecordingPermission.status == .granted
                && Preferences.previewSelectedWindow && !Preferences.onlyShowApplications()
-               && App.app.tilesPanel.isKeyWindow,
+               && TilesPanel.shared.isKeyWindow,
            let window = selectedWindow(),
            let id = window.cgWindowId,
            let thumbnail = window.thumbnail,
            let position = window.position,
            let size = window.size {
-            App.app.previewPanel.show(id, thumbnail, position, size)
+            PreviewPanel.show(id, thumbnail, position, size)
         } else {
-            App.app.previewPanel.orderOut(nil)
+            PreviewPanel.shared.orderOut(nil)
         }
     }
 
@@ -300,7 +299,8 @@ class Windows {
     }
 
     static func updatesBeforeShowing() -> Bool {
-        if list.count == 0 || MissionControl.state() == .showAllWindows || MissionControl.state() == .showFrontWindows { return false }
+        if MissionControl.state() == .showAllWindows || MissionControl.state() == .showFrontWindows { return false }
+        if list.isEmpty { return true }
         // TODO: find a way to update space info when spaces are changed, instead of on every trigger
         // workaround: when Preferences > Mission Control > "Displays have separate Spaces" is unchecked,
         // switching between displays doesn't trigger .activeSpaceDidChangeNotification; we get the latest manually
@@ -334,7 +334,6 @@ class Windows {
             }
             reorderListForTabHierarchy()
         }
-        if (!list.contains { $0.shouldShowTheUser }) { return false }
         return true
     }
 
@@ -342,7 +341,8 @@ class Windows {
     static func refreshThumbnailsAsync(_ windows: [Window], _ source: RefreshCausedBy, windowRemoved: Bool = false) {
         guard (!windows.isEmpty || windowRemoved) && ScreenRecordingPermission.status == .granted
                && !Preferences.onlyShowApplications()
-               && (!Appearance.hideThumbnails || Preferences.previewSelectedWindow) else { return }
+               && (!Appearance.hideThumbnails || Preferences.previewSelectedWindow)
+               && (Preferences.captureWindowsInBackground || App.appIsBeingUsed) else { return }
         var eligibleWindows = [Window]()
         for window in windows {
             if !window.isWindowlessApp, let cgWindowId = window.cgWindowId, cgWindowId != CGWindowID(bitPattern: -1) {
@@ -375,7 +375,7 @@ class Windows {
         }
     }
 
-    private static func shouldHideWindow(_ window: Window, _ entry: BlacklistEntry) -> Bool {
+    private static func shouldHideWindow(_ window: Window, _ entry: ExceptionEntry) -> Bool {
         switch entry.hide {
         case .none:
             return false
@@ -394,20 +394,20 @@ class Windows {
     private static func refreshIfWindowShouldBeShownToTheUser(_ window: Window) {
         window.shouldShowTheUser =
             !(window.application.bundleIdentifier.flatMap { id in
-                Preferences.blacklist.contains {
+                Preferences.exceptions.contains {
                     id.hasPrefix($0.bundleIdentifier) && shouldHideWindow(window, $0)
                 }
             } ?? false) &&
-            !(Preferences.appsToShow[App.app.shortcutIndex] == .active && window.application.pid != Applications.frontmostPid) &&
-            !(Preferences.appsToShow[App.app.shortcutIndex] == .nonActive && window.application.pid == Applications.frontmostPid) &&
-            !(!(Preferences.showHiddenWindows[App.app.shortcutIndex] != .hide) && window.isHidden) &&
-            ((Preferences.showWindowlessApps[App.app.shortcutIndex] != .hide && window.isWindowlessApp) ||
+            !(Preferences.appsToShow[App.shortcutIndex] == .active && window.application.pid != Applications.frontmostPid) &&
+            !(Preferences.appsToShow[App.shortcutIndex] == .nonActive && window.application.pid == Applications.frontmostPid) &&
+            !(!(Preferences.showHiddenWindows[App.shortcutIndex] != .hide) && window.isHidden) &&
+            ((Preferences.showWindowlessApps[App.shortcutIndex] != .hide && window.isWindowlessApp) ||
                 !window.isWindowlessApp &&
-                !(!(Preferences.showFullscreenWindows[App.app.shortcutIndex] != .hide) && window.isFullscreen) &&
-                !(!(Preferences.showMinimizedWindows[App.app.shortcutIndex] != .hide) && window.isMinimized) &&
-                !(Preferences.spacesToShow[App.app.shortcutIndex] == .visible && !Spaces.visibleSpaces.contains { visibleSpace in window.spaceIds.contains { $0 == visibleSpace } }) &&
-                !(Preferences.spacesToShow[App.app.shortcutIndex] == .nonVisible && Spaces.visibleSpaces.contains { visibleSpace in window.spaceIds.contains { $0 == visibleSpace } }) &&
-                !(Preferences.screensToShow[App.app.shortcutIndex] == .showingAltTab && !window.isOnScreen(NSScreen.preferred)) &&
+                !(!(Preferences.showFullscreenWindows[App.shortcutIndex] != .hide) && window.isFullscreen) &&
+                !(!(Preferences.showMinimizedWindows[App.shortcutIndex] != .hide) && window.isMinimized) &&
+                !(Preferences.spacesToShow[App.shortcutIndex] == .visible && !Spaces.visibleSpaces.contains { visibleSpace in window.spaceIds.contains { $0 == visibleSpace } }) &&
+                !(Preferences.spacesToShow[App.shortcutIndex] == .nonVisible && Spaces.visibleSpaces.contains { visibleSpace in window.spaceIds.contains { $0 == visibleSpace } }) &&
+                !(Preferences.screensToShow[App.shortcutIndex] == .showingAltTab && !window.isOnScreen(NSScreen.preferred)) &&
                 (Preferences.showTabsAsWindows || Preferences.showTabHierarchyInMainPanel || !window.isTabbed))
     }
 
@@ -456,9 +456,8 @@ class Windows {
             hoveredWindowIndex = nil
             TilesView.highlight(oldIndex)
         }
-        if let frontmostPid = Applications.frontmostPid,
-           let frontmostApp = Applications.findOrCreate(frontmostPid, false),
-           (frontmostApp.focusedWindow == nil || Preferences.windowOrder[App.app.shortcutIndex] != .recentlyFocused),
+        if Applications.frontmostPid != nil,
+           Preferences.windowOrder[App.shortcutIndex] != .recentlyFocused,
            let lastFocusedOrderWindowIndex = getLastFocusedOrderWindowIndex() {
             updateSelectedAndHoveredWindowIndex(lastFocusedOrderWindowIndex)
         } else {
@@ -514,7 +513,7 @@ class Windows {
     }
 
     private static func focusedWindowChangedWhileShowing(_ focusedWindowTarget: String?) -> Bool {
-        guard App.app.appIsBeingUsed, Search.normalizedQuery(searchQuery).isEmpty else { return false }
+        guard App.appIsBeingUsed, Search.normalizedQuery(searchQuery).isEmpty else { return false }
         guard let lastFocusedWindowTarget, let focusedWindowTarget else { return false }
         return focusedWindowTarget != lastFocusedWindowTarget
     }
@@ -522,6 +521,7 @@ class Windows {
     private static func restoreSelectionTargetIfVisible() -> Bool {
         guard let selectedWindowTarget else { return false }
         guard let index = list.firstIndex(where: { $0.id == selectedWindowTarget && shouldDisplay($0) }) else { return false }
+        if index == selectedWindowIndex { return true }
         updateSelectedAndHoveredWindowIndex(index)
         return true
     }
@@ -529,7 +529,8 @@ class Windows {
     private static func adaptSelectionToVisibleIndexes(_ visibleIndexes: [Int], _ firstVisibleIndex: Int) {
         guard let lastVisibleIndex = visibleIndexes.last else { return }
         if !visibleIndexes.contains(selectedWindowIndex) {
-            updateSelectedAndHoveredWindowIndex(firstVisibleIndex)
+            let closest = visibleIndexes.last(where: { $0 < selectedWindowIndex }) ?? lastVisibleIndex
+            updateSelectedAndHoveredWindowIndex(closest)
             return
         }
         if selectedWindowIndex > lastVisibleIndex {
@@ -559,7 +560,7 @@ class Windows {
             lastWindowActivityType = .hover
         }
         if !fromMouse {
-            App.app.tilesPanel.tilesView.thumbnailOverView.resetHoveredWindow()
+            TilesView.thumbnailOverView.resetHoveredWindow()
         }
         if (!fromMouse || Preferences.mouseHoverEnabled)
                && (newIndex != selectedWindowIndex || lastWindowActivityType == .hover) {
@@ -574,12 +575,12 @@ class Windows {
         guard let index else { return }
         TilesView.highlight(index)
         let focusedView = TilesView.recycledViews[index]
-        App.app.tilesPanel.tilesView.scrollView.contentView.scrollToVisible(focusedView.frame)
+        TilesView.scrollView.contentView.scrollToVisible(focusedView.frame)
         voiceOverWindow(index)
     }
 
     static func cycleSelectedWindowIndex(_ step: Int, allowWrap: Bool = true) {
-        guard App.app.appIsBeingUsed else { return }
+        guard App.appIsBeingUsed else { return }
         guard list.contains(where: { shouldDisplay($0) }) else { return }
         let nextIndex = selectedWindowIndexAfterCycling(step)
         // don't wrap-around at the end, if key-repeat
@@ -640,17 +641,17 @@ class Windows {
                 return effectiveLastFocusOrder($0) < effectiveLastFocusOrder($1)
             }
             // separate buckets for these types of windows
-            if Preferences.showWindowlessApps[App.app.shortcutIndex] == .showAtTheEnd && $0.isWindowlessApp != $1.isWindowlessApp {
+            if Preferences.showWindowlessApps[App.shortcutIndex] == .showAtTheEnd && $0.isWindowlessApp != $1.isWindowlessApp {
                 return $1.isWindowlessApp
             }
-            if Preferences.showHiddenWindows[App.app.shortcutIndex] == .showAtTheEnd && $0.isHidden != $1.isHidden {
+            if Preferences.showHiddenWindows[App.shortcutIndex] == .showAtTheEnd && $0.isHidden != $1.isHidden {
                 return $1.isHidden
             }
-            if Preferences.showMinimizedWindows[App.app.shortcutIndex] == .showAtTheEnd && $0.isMinimized != $1.isMinimized {
+            if Preferences.showMinimizedWindows[App.shortcutIndex] == .showAtTheEnd && $0.isMinimized != $1.isMinimized {
                 return $1.isMinimized
             }
             // sort within each buckets
-            let sortType = Preferences.windowOrder[App.app.shortcutIndex]
+            let sortType = Preferences.windowOrder[App.shortcutIndex]
             if sortType == .recentlyFocused {
                 let g0 = effectiveLastFocusOrder($0)
                 let g1 = effectiveLastFocusOrder($1)
@@ -766,9 +767,7 @@ class Windows {
     }
 
     static func appendWindow(_ window: Window) {
-        list.forEach {
-            $0.lastFocusOrder += 1
-        }
+        window.lastFocusOrder = list.count
         list.append(window)
         if list.count > TilesView.recycledViews.count {
             TilesView.recycledViews.append(TileView())
@@ -776,6 +775,11 @@ class Windows {
     }
 
     static func removeWindows(_ windows: [Window], _ addWindowlessWindowIfNeeded: Bool) {
+        for w in windows {
+            if w.application.focusedWindow?.cgWindowId == w.cgWindowId {
+                w.application.focusedWindow = nil
+            }
+        }
         let toRemove = windows.map { $0.lastFocusOrder }
         list.removeAll { w in
             if toRemove.contains(w.lastFocusOrder) {
@@ -785,10 +789,17 @@ class Windows {
             w.lastFocusOrder -= howManyToShift
             return false
         }
+        for w in windows {
+            if let wid = w.cgWindowId {
+                Applications.manualWindowUpdatesThrottler.removeEntry(withKey: "\(wid)")
+                AccessibilityEvents.removeThrottlerEntries(wid: wid)
+            }
+        }
         if addWindowlessWindowIfNeeded {
             windows.forEach { $0.application.addWindowlessWindowIfNeeded() }
         }
-        App.app.refreshOpenUiAfterExternalEvent([], windowRemoved: true)
+        lastFocusedWindowTarget = getLastFocusedOrderWindowIndex().map { list[$0].id }
+        App.refreshOpenUiAfterExternalEvent([], windowRemoved: true)
     }
 }
 
