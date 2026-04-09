@@ -35,6 +35,7 @@ class CliServer {
     static let error = "error"
     static let noOutput = "noOutput"
 
+    // main.sync is safe here: the main thread never synchronously waits on the CLI thread
     static func executeCommandAndSendReponse(_ rawValue: String) -> Codable {
         var output: Codable = ""
         DispatchQueue.main.sync {
@@ -54,15 +55,11 @@ class CliServer {
             Applications.removeZombieWindows()
             // refresh space/screen assignments so CLI returns fresh data
             Spaces.refresh()
-            let spaceIdsAndIndexes = Spaces.idsAndIndexes.map { $0.0 }
-            let cgsWindowIds = Spaces.windowsInSpaces(spaceIdsAndIndexes)
-            let visibleCgsWindowIds = Spaces.windowsInSpaces(spaceIdsAndIndexes, false)
             for window in Windows.list {
                 window.updateSpacesAndScreen()
-                Windows.detectTabbedWindows(window, cgsWindowIds, visibleCgsWindowIds)
             }
-            // infer tab parent relationships from isTabbed state
-            let parentMap = Windows.inferTabParentIds(Windows.list)
+            // compute tab parent relationships via AX tab groups
+            let parentMap = TabHierarchy.queryAXTabGroups(Windows.list)
             for window in Windows.list {
                 if let wid = window.cgWindowId {
                     window.parentWindowId = parentMap[wid] ?? 0
@@ -326,14 +323,14 @@ class CliServer {
     // MARK: - debug-tabs
 
     private static func debugTabs() -> Codable {
-        // Refresh space/screen and detect tabbed state (same as --detailed-list)
+        // Refresh space/screen and detect tabbed state via heuristic (for diagnostic comparison)
         Spaces.refresh()
         let spaceIdsAndIndexes = Spaces.idsAndIndexes.map { $0.0 }
         let cgsWindowIds = Spaces.windowsInSpaces(spaceIdsAndIndexes)
         let visibleCgsWindowIds = Spaces.windowsInSpaces(spaceIdsAndIndexes, false)
         for window in Windows.list {
             window.updateSpacesAndScreen()
-            Windows.detectTabbedWindows(window, cgsWindowIds, visibleCgsWindowIds)
+            TabHierarchy.detectTabbedWindows(window, cgsWindowIds, visibleCgsWindowIds)
         }
 
         var entries = [DebugTabEntry]()

@@ -11,9 +11,6 @@ class Windows {
     static var searchQuery = ""
     private static var shouldSelectBestMatchOnSearchChange = false
     private static var shouldRestoreDefaultSelectionOnSearchClear = false
-    // Group-aware sort keys: tab group members share min(key) across group
-    private static var groupLastFocusKeys = [CGWindowID: Int]()
-    private static var groupCreationKeys = [CGWindowID: Int]()
 
     static func shouldDisplay(_ window: Window) -> Bool {
         window.shouldShowTheUser && Search.matches(window, query: searchQuery)
@@ -45,10 +42,11 @@ class Windows {
     static func updateIsFullscreenOnCurrentSpace() {
         let windowsOnCurrentSpace = list.filter { !$0.isWindowlessApp }
         for window in windowsOnCurrentSpace {
-            AXUIElement.retryAxCallUntilTimeout(context: window.debugId, after: .now() + humanPerceptionDelay, wid: window.cgWindowId, callType: .updateWindowFromAxEvent) { [weak window] in
+            guard let wid = window.cgWindowId, let axUiElement = window.axUiElement else { continue }
+            AXCallScheduler.shared.schedule(key: "wid-\(wid)", context: window.debugId, pid: window.application.pid) { [weak window] in
                 guard let window else { return }
                 // we reuse existing code, to update .isFullscreen, as if there was a kAXWindowResizedNotification
-                try AccessibilityEvents.handleEventWindow(kAXWindowResizedNotification, window.cgWindowId!, window.application.pid, window.axUiElement!)
+                try AccessibilityEvents.handleEventWindow(kAXWindowResizedNotification, wid, window.application.pid, axUiElement)
             }
         }
     }
@@ -90,214 +88,6 @@ class Windows {
         }
     }
 
-    /// tabs detection is a flaky work-around the lack of public API to observe OS tabs
-    /// see: https://github.com/lwouis/alt-tab-macos/issues/1540
-    static func detectTabbedWindows(_ window: Window, _ cgsWindowIds: [CGWindowID], _ visibleCgsWindowIds: [CGWindowID]) {
-        if let cgWindowId = window.cgWindowId {
-            if window.isMinimized || window.isHidden {
-                if #available(macOS 13.0, *) {
-                    // not exact after window merging
-                    window.isTabbed = !cgsWindowIds.contains(cgWindowId)
-                } else {
-                    // not known
-                    window.isTabbed = false
-                }
-            } else {
-                window.isTabbed = !visibleCgsWindowIds.contains(cgWindowId)
-            }
-        }
-    }
-
-    /// Infers tab parent-child relationships from the isTabbed flag.
-    /// Groups windows by PID: tabbed (invisible) windows are children of
-    /// the non-tabbed (visible) window with the lowest lastFocusOrder in the same app.
-    static func inferTabParentIds(_ windows: [Window]) -> [CGWindowID: CGWindowID] {
-        var result = [CGWindowID: CGWindowID]()
-        // group windows by PID
-        var byPid = [pid_t: [Window]]()
-        for window in windows {
-            guard let _ = window.cgWindowId else { continue }
-            byPid[window.application.pid, default: []].append(window)
-        }
-        for (_, appWindows) in byPid {
-            let visible = appWindows.filter { !$0.isTabbed && !$0.isWindowlessApp }
-            let tabbed = appWindows.filter { $0.isTabbed }
-            guard !tabbed.isEmpty else { continue }
-            // the visible window with lowest lastFocusOrder is the "parent"
-            guard let parent = visible.min(by: { $0.lastFocusOrder < $1.lastFocusOrder }),
-                  let parentWid = parent.cgWindowId else { continue }
-            for child in tabbed {
-                if let childWid = child.cgWindowId {
-                    result[childWid] = parentWid
-                }
-            }
-        }
-        return result
-    }
-
-    /// Query AX tab groups on visible windows to build child→parent mapping.
-    /// Walks each visible window's AXChildren for AXTabGroup, reads tab titles,
-    /// then matches any window by (PID, title). Does NOT depend on isTabbed flag
-    /// since that requires detectTabbedWindows which the side panel path doesn't call.
-    /// On title collision across tab groups, first match wins — acceptable since rare.
-    static func queryAXTabGroups(_ windows: [Window]) -> [CGWindowID: CGWindowID] {
-        var result = [CGWindowID: CGWindowID]()
-        // forward map: "pid:title" → parentWid (from visible windows' AX tab groups)
-        var titleToParent = [String: CGWindowID]()
-        // collect which wids are "parent" windows (have an AXTabGroup)
-        var parentWids = Set<CGWindowID>()
-        for window in windows {
-            guard let axElement = window.axUiElement,
-                  let wid = window.cgWindowId,
-                  let childrenAttrs = try? axElement.attributes([kAXChildrenAttribute]),
-                  let children = childrenAttrs.children else { continue }
-            for child in children {
-                guard let childRole = try? child.attributes([kAXRoleAttribute]),
-                      childRole.role == "AXTabGroup",
-                      let tgChildren = try? child.attributes([kAXChildrenAttribute]),
-                      let tabs = tgChildren.children else { continue }
-                parentWids.insert(wid)
-                for tab in tabs {
-                    guard let tabAttrs = try? tab.attributes([kAXRoleAttribute, kAXTitleAttribute]),
-                          tabAttrs.role == "AXRadioButton",
-                          let title = tabAttrs.title, !title.isEmpty else { continue }
-                    let key = "\(window.application.pid):\(title)"
-                    if titleToParent[key] == nil {
-                        titleToParent[key] = wid
-                    }
-                }
-            }
-        }
-        // match windows by (pid, title) — a window is a tab child if its title
-        // appears in a parent's AXTabGroup and it's not the parent itself
-        for window in windows {
-            guard let wid = window.cgWindowId, !parentWids.contains(wid) else { continue }
-            let title = window.title ?? ""
-            guard !title.isEmpty else { continue }
-            let key = "\(window.application.pid):\(title)"
-            if let parentWid = titleToParent[key] {
-                result[wid] = parentWid
-            }
-        }
-
-        // Fullscreen fallback: when a fullscreen window has no AXTabGroup (AX hierarchy
-        // restructures in native fullscreen), find same-PID "orphan" windows with no space
-        // assignment — these are inactive tabs that CGS doesn't place on any space.
-        let alreadyMapped = Set(result.keys).union(parentWids)
-        // Index: PID → fullscreen visible windows (candidate parents)
-        var fullscreenParentsByPid = [pid_t: [Window]]()
-        for window in windows {
-            guard let wid = window.cgWindowId,
-                  !alreadyMapped.contains(wid),
-                  !parentWids.contains(wid),
-                  window.spaceIds.contains(where: { Spaces.isFullscreenSpace($0) }) else { continue }
-            fullscreenParentsByPid[window.application.pid, default: []].append(window)
-        }
-        if !fullscreenParentsByPid.isEmpty {
-            // Find orphan windows: same PID, not already mapped, no real space assignment
-            for window in windows {
-                guard let wid = window.cgWindowId,
-                      !alreadyMapped.contains(wid),
-                      !parentWids.contains(wid),
-                      result[wid] == nil,
-                      // Spaceless: only has the sentinel value or empty
-                      window.spaceIds.allSatisfy({ $0 == CGSSpaceID.max }),
-                      let candidates = fullscreenParentsByPid[window.application.pid],
-                      !candidates.isEmpty else { continue }
-                // Match by bounds proximity: native tabs share screen position and width;
-                // height differs by at most the tab bar (~40px). This prevents matching
-                // a spaceless window on screen A to a fullscreen parent on screen B
-                // (the old CGWindowID proximity heuristic got this wrong when windows
-                // were created close in time but later moved to different screens).
-                let boundsMatched: [Window]
-                if let pos = window.position, let sz = window.size {
-                    boundsMatched = candidates.filter { candidate in
-                        guard let cPos = candidate.position, let cSz = candidate.size else { return false }
-                        return abs(pos.x - cPos.x) < 10
-                            && abs(sz.width - cSz.width) < 10
-                            && abs(pos.y - cPos.y) < 80
-                            && abs(sz.height - cSz.height) < 80
-                    }
-                } else {
-                    // No bounds available — can't verify screen match; skip to avoid false positives
-                    boundsMatched = []
-                }
-                guard !boundsMatched.isEmpty else { continue }
-                // Tiebreaker among bounds-matched candidates: CGWindowID proximity
-                // (tabs created together get sequential IDs)
-                let parent = boundsMatched.min(by: {
-                    abs(Int($0.cgWindowId ?? 0) - Int(wid)) < abs(Int($1.cgWindowId ?? 0) - Int(wid))
-                })
-                if let parentWid = parent?.cgWindowId {
-                    result[wid] = parentWid
-                }
-            }
-        }
-
-        return result
-    }
-
-    /// Compute group-aware sort keys for tab groups.
-    /// Windows in a tab group all get min(keyPath) across group members.
-    /// Windows not in any group keep their own value.
-    static func groupSortKeys(_ windows: [Window], tabParentMap: [CGWindowID: CGWindowID], keyPath: KeyPath<Window, Int>) -> [CGWindowID: Int] {
-        // Build wid → window lookup
-        var windowByWid = [CGWindowID: Window]()
-        for window in windows {
-            guard let wid = window.cgWindowId else { continue }
-            windowByWid[wid] = window
-        }
-        // Build parent → [children] from tabParentMap
-        var childrenByParent = [CGWindowID: [Window]]()
-        for (childWid, parentWid) in tabParentMap {
-            if let childWindow = windowByWid[childWid] {
-                childrenByParent[parentWid, default: []].append(childWindow)
-            }
-        }
-        // For each group (parent + its children), find min(keyPath)
-        var result = [CGWindowID: Int]()
-        for (parentWid, children) in childrenByParent {
-            var groupValues = children.map { $0[keyPath: keyPath] }
-            if let parentWindow = windowByWid[parentWid] {
-                groupValues.append(parentWindow[keyPath: keyPath])
-            }
-            guard let minVal = groupValues.min() else { continue }
-            // Assign min to all group members
-            if windowByWid[parentWid] != nil {
-                result[parentWid] = minVal
-            }
-            for child in children {
-                if let wid = child.cgWindowId {
-                    result[wid] = minVal
-                }
-            }
-        }
-        // Windows not in any group keep their own value
-        for window in windows {
-            guard let wid = window.cgWindowId else { continue }
-            if result[wid] == nil {
-                result[wid] = window[keyPath: keyPath]
-            }
-        }
-        return result
-    }
-
-    /// Look up group-aware lastFocusOrder; falls back to window's own value.
-    private static func effectiveLastFocusOrder(_ window: Window) -> Int {
-        if let wid = window.cgWindowId, let key = groupLastFocusKeys[wid] {
-            return key
-        }
-        return window.lastFocusOrder
-    }
-
-    /// Look up group-aware creationOrder; falls back to window's own value.
-    private static func effectiveCreationOrder(_ window: Window) -> Int {
-        if let wid = window.cgWindowId, let key = groupCreationKeys[wid] {
-            return key
-        }
-        return window.creationOrder
-    }
-
     static func updatesBeforeShowing() -> Bool {
         if MissionControl.state() == .showAllWindows || MissionControl.state() == .showFrontWindows { return false }
         if list.isEmpty { return true }
@@ -305,34 +95,22 @@ class Windows {
         // workaround: when Preferences > Mission Control > "Displays have separate Spaces" is unchecked,
         // switching between displays doesn't trigger .activeSpaceDidChangeNotification; we get the latest manually
         Spaces.refresh()
-        let spaceIdsAndIndexes = Spaces.idsAndIndexes.map { $0.0 }
-        lazy var cgsWindowIds = Spaces.windowsInSpaces(spaceIdsAndIndexes)
-        lazy var visibleCgsWindowIds = Spaces.windowsInSpaces(spaceIdsAndIndexes, false)
         for window in list {
-            detectTabbedWindows(window, cgsWindowIds, visibleCgsWindowIds)
             window.updateSpacesAndScreen()
             refreshIfWindowShouldBeShownToTheUser(window)
         }
         refreshWhichWindowsToShowTheUser()
-        // Always compute tab groups — needed for sort stability even without display hierarchy
-        let parentMap = queryAXTabGroups(list)
-        // Compute group sort keys so tab group members cluster together in sort
-        if Preferences.groupTabsInSortOrder {
-            groupLastFocusKeys = groupSortKeys(list, tabParentMap: parentMap, keyPath: \.lastFocusOrder)
-            groupCreationKeys = groupSortKeys(list, tabParentMap: parentMap, keyPath: \.creationOrder)
-        } else {
-            groupLastFocusKeys.removeAll()
-            groupCreationKeys.removeAll()
-        }
+        // Fork: compute tab groups and group sort keys for tab-aware sorting
+        TabHierarchy.computeAndApply(list)
         sort()
-        // Display-only: indentation + child-after-parent reordering
+        // Fork: reorder for tab hierarchy display in main panel
         if Preferences.showTabHierarchyInMainPanel {
             for window in list {
                 if let wid = window.cgWindowId {
-                    window.parentWindowId = parentMap[wid] ?? 0
+                    window.parentWindowId = TabHierarchy.lastParentMap[wid] ?? 0
                 }
             }
-            reorderListForTabHierarchy()
+            list = TabHierarchy.orderWithTabHierarchy(list)
         }
         return true
     }
@@ -641,7 +419,7 @@ class Windows {
                 let score0 = Search.relevance(for: $0, query: trimmedQuery)
                 let score1 = Search.relevance(for: $1, query: trimmedQuery)
                 if score0 != score1 { return score0 > score1 }
-                return effectiveLastFocusOrder($0) < effectiveLastFocusOrder($1)
+                return TabHierarchy.effectiveLastFocusOrder($0) < TabHierarchy.effectiveLastFocusOrder($1)
             }
             // separate buckets for these types of windows
             if Preferences.showWindowlessApps[App.shortcutIndex] == .showAtTheEnd && $0.isWindowlessApp != $1.isWindowlessApp {
@@ -656,14 +434,14 @@ class Windows {
             // sort within each buckets
             let sortType = Preferences.windowOrder[App.shortcutIndex]
             if sortType == .recentlyFocused {
-                let g0 = effectiveLastFocusOrder($0)
-                let g1 = effectiveLastFocusOrder($1)
+                let g0 = TabHierarchy.effectiveLastFocusOrder($0)
+                let g1 = TabHierarchy.effectiveLastFocusOrder($1)
                 if g0 != g1 { return g0 < g1 }
                 return $0.lastFocusOrder < $1.lastFocusOrder
             }
             if sortType == .recentlyCreated {
-                let g0 = effectiveCreationOrder($0)
-                let g1 = effectiveCreationOrder($1)
+                let g0 = TabHierarchy.effectiveCreationOrder($0)
+                let g1 = TabHierarchy.effectiveCreationOrder($1)
                 if g0 != g1 { return g1 < g0 }
                 return $1.creationOrder < $0.creationOrder
             }
@@ -686,47 +464,13 @@ class Windows {
                 }
             }
             if order == .orderedSame {
-                order = effectiveLastFocusOrder($0).compare(effectiveLastFocusOrder($1))
+                order = TabHierarchy.effectiveLastFocusOrder($0).compare(TabHierarchy.effectiveLastFocusOrder($1))
                 if order == .orderedSame {
                     order = $0.lastFocusOrder.compare($1.lastFocusOrder)
                 }
             }
             return order == .orderedAscending
         }
-    }
-
-    /// Reorders `list` so that tab children immediately follow their parent window.
-    private static func reorderListForTabHierarchy() {
-        list = orderWithTabHierarchy(list)
-    }
-
-    /// Returns windows reordered so tab children immediately follow their parent.
-    /// Preserves original ordering for root windows and among siblings.
-    static func orderWithTabHierarchy(_ windows: [Window]) -> [Window] {
-        // build parent → children map
-        var childrenByParent = [CGWindowID: [Window]]()
-        var rootWindows = [Window]()
-        for window in windows {
-            if window.isTabChild {
-                childrenByParent[window.parentWindowId, default: []].append(window)
-            } else {
-                rootWindows.append(window)
-            }
-        }
-        // interleave: each root followed by its children
-        var result = [Window]()
-        result.reserveCapacity(windows.count)
-        for window in rootWindows {
-            result.append(window)
-            if let wid = window.cgWindowId, let children = childrenByParent.removeValue(forKey: wid) {
-                result.append(contentsOf: children)
-            }
-        }
-        // orphans: children whose parent isn't in the list (parent closed or filtered out)
-        for (_, orphans) in childrenByParent {
-            result.append(contentsOf: orphans)
-        }
-        return result
     }
 
     static func getLastFocusedOrderWindowIndex() -> Int? {
@@ -794,8 +538,12 @@ class Windows {
         }
         for w in windows {
             if let wid = w.cgWindowId {
-                Applications.manualWindowUpdatesThrottler.removeEntry(withKey: "\(wid)")
-                AccessibilityEvents.removeThrottlerEntries(wid: wid)
+                AXCallScheduler.shared.removeEntry(key: "wid-\(wid)")
+                Applications.windowListUpdateThrottler.removeEntry(withKey: "\(wid)")
+            }
+            // when a tabbed window is removed, update its former siblings' tab group
+            if let siblingWids = w.tabbedSiblingWids {
+                TabGroup.removedWindowFromGroup(wid: w.cgWindowId, siblingWids: siblingWids)
             }
         }
         if addWindowlessWindowIfNeeded {

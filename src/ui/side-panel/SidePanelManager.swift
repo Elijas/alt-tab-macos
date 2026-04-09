@@ -196,10 +196,10 @@ class SidePanelManager {
 
         // Compute tab parent map when any tab-aware feature needs it (AX IPC is expensive)
         let needsTabInfo = Preferences.showTabHierarchyInSidePanel || Preferences.showTabHierarchyInMainPanel || Preferences.groupTabsInSortOrder
-        let tabParentMap: [CGWindowID: CGWindowID] = needsTabInfo ? Windows.queryAXTabGroups(Array(windowByCgId.values)) : [:]
+        let tabParentMap: [CGWindowID: CGWindowID] = needsTabInfo ? TabHierarchy.queryAXTabGroups(Array(windowByCgId.values)) : [:]
         let groupCreationKeys: [CGWindowID: Int]
         if Preferences.groupTabsInSortOrder {
-            groupCreationKeys = Windows.groupSortKeys(Array(windowByCgId.values), tabParentMap: tabParentMap, keyPath: \.creationOrder)
+            groupCreationKeys = TabHierarchy.groupSortKeys(Array(windowByCgId.values), tabParentMap: tabParentMap, keyPath: \.creationOrder)
         } else {
             groupCreationKeys = [:]
         }
@@ -332,7 +332,7 @@ class SidePanelManager {
                 return w0.creationOrder > w1.creationOrder
             }
             if showTabs {
-                sorted = Windows.orderWithTabHierarchy(sorted)
+                sorted = TabHierarchy.orderWithTabHierarchy(sorted)
             }
             for w in sorted { seen.insert(w.cgWindowId!) }
             groups.append(sorted)

@@ -14,7 +14,7 @@ class App: AppCenterApplication {
     static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as! String
     static let licence = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as! String
     static let repository = "https://github.com/lwouis/alt-tab-macos"
-    static let website = "https://alt-tab-macos.netlify.app"
+    static let website = "https://alt-tab.app"
     static let appIcon = CGImage.named("app.icns")
     override class var shared: App { super.shared as! App }
     static var supportProjectAction: Selector { #selector(App.supportProject) }
@@ -24,6 +24,7 @@ class App: AppCenterApplication {
     static var forceDoNothingOnRelease = false
     private static var isFirstSummon = true
     private static var isVeryFirstSummon = true
+    private static var pendingShowSettingsWindow = false
     // periphery:ignore
     private static var appCenterDelegate: AppCenterCrash?
     // don't queue multiple delayed rebuildUi() calls
@@ -59,6 +60,7 @@ class App: AppCenterApplication {
         appIsBeingUsed = false
         isFirstSummon = true
         forceDoNothingOnRelease = false
+        UsageStats.resetSession()
         TilesView.endSearchSession()
         ContextMenuEvents.toggle(false)
         CursorEvents.toggle(false)
@@ -163,6 +165,10 @@ class App: AppCenterApplication {
     }
 
     @objc static func showSettingsWindow() {
+        guard Menubar.statusItem != nil else {
+            pendingShowSettingsWindow = true
+            return
+        }
         initializeSettingsWindowIfNeeded()
         showSecondaryWindow(SettingsWindow.shared!)
         if SettingsWindow.shared!.isVisible != true {
@@ -295,6 +301,7 @@ class App: AppCenterApplication {
         forceDoNothingOnRelease = forceDoNothingOnRelease_
         Logger.debug { "isFirstSummon:\(isFirstSummon) shortcutIndex:\(shortcutIndex)" }
         appIsBeingUsed = true
+        UsageStats.recordTrigger()
         if isFirstSummon || shortcutIndex != App.shortcutIndex {
             NSScreen.updatePreferred()
             if isVeryFirstSummon {
@@ -365,7 +372,7 @@ class App: AppCenterApplication {
         TilesPanel.updateMaxPossibleThumbnailSize()
         TilesPanel.updateMaxPossibleAppIconSize()
         Menubar.initialize()
-        MainMenu.loadFromXib()
+        MainMenu.create()
         _ = TilesPanel()
         _ = PreviewPanel()
         Spaces.refresh()
@@ -384,9 +391,14 @@ class App: AppCenterApplication {
         PreferencesEvents.initialize()
         BenchmarkRunner.startIfNeeded()
         showSettingsWindowOnFirstLaunchIfNeeded()
+        if pendingShowSettingsWindow {
+            pendingShowSettingsWindow = false
+            showSettingsWindow()
+        }
         #if DEBUG
 //            App.showSettingsWindow()
         #endif
+        UsageStats.prune()
         Logger.info { "Finished launching AltTab" }
     }
 }
