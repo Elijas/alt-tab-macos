@@ -405,10 +405,13 @@ class Windows {
                 !window.isWindowlessApp &&
                 !(!(Preferences.showFullscreenWindows[App.shortcutIndex] != .hide) && window.isFullscreen) &&
                 !(!(Preferences.showMinimizedWindows[App.shortcutIndex] != .hide) && window.isMinimized) &&
-                !(Preferences.spacesToShow[App.shortcutIndex] == .visible && !Spaces.visibleSpaces.contains { visibleSpace in window.spaceIds.contains { $0 == visibleSpace } }) &&
-                !(Preferences.spacesToShow[App.shortcutIndex] == .nonVisible && Spaces.visibleSpaces.contains { visibleSpace in window.spaceIds.contains { $0 == visibleSpace } }) &&
+                // Empty `spaceIds` means "no known space" (e.g. inactive OS tabs — CGS doesn't
+                // assign spaces to them). Exempt those from visible/nonVisible filters so they
+                // aren't silently dropped by a space filter their parent would have passed.
+                !(Preferences.spacesToShow[App.shortcutIndex] == .visible && !window.spaceIds.isEmpty && !Spaces.visibleSpaces.contains { visibleSpace in window.spaceIds.contains { $0 == visibleSpace } }) &&
+                !(Preferences.spacesToShow[App.shortcutIndex] == .nonVisible && !window.spaceIds.isEmpty && Spaces.visibleSpaces.contains { visibleSpace in window.spaceIds.contains { $0 == visibleSpace } }) &&
                 !(Preferences.screensToShow[App.shortcutIndex] == .showingAltTab && !window.isOnScreen(NSScreen.preferred)) &&
-                (Preferences.showTabsAsWindows || Preferences.showTabHierarchyInMainPanel || !window.isTabbed))
+                (Preferences.showTabsAsWindows || !window.isTabbed))
     }
 
     /// Selects the most appropriate main window from a given list of windows.
