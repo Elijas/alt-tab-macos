@@ -338,15 +338,27 @@ class SidePanelManager {
             groups.append(sorted)
         }
 
+        // Remove fullscreen spaces with no visible windows — they render as
+        // unnecessary "(empty)" rows in the panels.
+        var filteredGroups = [[Window]]()
+        var filteredSpaceIds = [CGSSpaceID]()
+        for (i, spaceId) in sortedSpaces.enumerated() {
+            if groups[i].isEmpty && Spaces.isFullscreenSpace(spaceId) {
+                continue
+            }
+            filteredGroups.append(groups[i])
+            filteredSpaceIds.append(spaceId)
+        }
+
         let currentSpaceGroupIndex: Int? = currentSpaceId.flatMap { csId in
-            sortedSpaces.firstIndex(of: csId)
+            filteredSpaceIds.firstIndex(of: csId)
         }
 
         // find per-screen "selected" window: lowest lastFocusOrder in the current space only
         var selectedWindowId: CGWindowID? = nil
         var lowestFocusOrder = Int.max
-        if let csgi = currentSpaceGroupIndex, csgi < groups.count {
-            for window in groups[csgi] {
+        if let csgi = currentSpaceGroupIndex, csgi < filteredGroups.count {
+            for window in filteredGroups[csgi] {
                 if window.lastFocusOrder < lowestFocusOrder {
                     lowestFocusOrder = window.lastFocusOrder
                     selectedWindowId = window.cgWindowId
@@ -355,11 +367,11 @@ class SidePanelManager {
         }
         let isActiveScreen = lowestFocusOrder == 0
 
-        let spaceIndexes = sortedSpaces.map { spaceId in
+        let spaceIndexes = filteredSpaceIds.map { spaceId in
             Spaces.idsAndIndexes.first { $0.0 == spaceId }?.1 ?? 0
         }
 
-        return (groups: groups, selectedWindowId: selectedWindowId, isActiveScreen: isActiveScreen, currentSpaceGroupIndex: currentSpaceGroupIndex, spaceIndexes: spaceIndexes, spaceIds: sortedSpaces)
+        return (groups: filteredGroups, selectedWindowId: selectedWindowId, isActiveScreen: isActiveScreen, currentSpaceGroupIndex: currentSpaceGroupIndex, spaceIndexes: spaceIndexes, spaceIds: filteredSpaceIds)
     }
 
     // MARK: - CLI: panel contents snapshot
