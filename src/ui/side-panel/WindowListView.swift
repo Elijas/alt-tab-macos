@@ -263,8 +263,17 @@ class WindowListView: NSView {
         }
         let headerSpace = headerHeights.prefix(headerCount).reduce(0, +)
 
+        // Skip separator when the following group has a visible header
+        var visibleSeparatorCount = 0
+        for gi in 0..<max(groups.count - 1, 0) {
+            let nextHasHeader = (gi + 1) < headerHeights.count && headerHeights[gi + 1] > 0
+            if !nextHasHeader {
+                visibleSeparatorCount += 1
+            }
+        }
+
         let contentHeight = CGFloat(totalRows) * rowHeight
-            + CGFloat(separatorCount) * separatorTotalHeight
+            + CGFloat(visibleSeparatorCount) * separatorTotalHeight
             + headerSpace
         var rowIndex = 0
         var separatorIndex = 0
@@ -321,16 +330,19 @@ class WindowListView: NSView {
                     rowIndex += 1
                 }
             }
-            // separator after each group except the last
+            // separator after each group except the last; skip when next group has a visible header
             if gi < groups.count - 1 {
-                yPos -= Self.separatorPadding
-                yPos -= separatorHeight
-                let sep = separatorPool[separatorIndex]
-                sep.frame = CGRect(x: 0, y: yPos, width: width, height: separatorHeight)
-                sep.isHidden = false
-                layoutOrder.append(.separator(separatorIndex))
-                separatorIndex += 1
-                yPos -= Self.separatorPadding
+                let nextHasHeader = (gi + 1) < headerHeights.count && headerHeights[gi + 1] > 0
+                if !nextHasHeader {
+                    yPos -= Self.separatorPadding
+                    yPos -= separatorHeight
+                    let sep = separatorPool[separatorIndex]
+                    sep.frame = CGRect(x: 0, y: yPos, width: width, height: separatorHeight)
+                    sep.isHidden = false
+                    layoutOrder.append(.separator(separatorIndex))
+                    separatorIndex += 1
+                    yPos -= Self.separatorPadding
+                }
             }
         }
 
