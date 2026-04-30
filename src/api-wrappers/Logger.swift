@@ -14,6 +14,16 @@ class Logger {
         console.format = "$C$D\(shortDateTimeFormat)$d $L$c $N.swift:$l $F $M"
         console.minLevel = decideLevel()
         logger.addDestination(console)
+
+        // Persist logs to disk — console output is lost when launched from Finder/Dock
+        let exec = Bundle.main.infoDictionary?["CFBundleExecutable"] as? String ?? "alt-tab-macos"
+        let logsDir = "\(NSHomeDirectory())/Library/Logs/\(exec)"
+        try? FileManager.default.createDirectory(atPath: logsDir, withIntermediateDirectories: true)
+        let file = FileDestination()
+        file.logFileURL = URL(fileURLWithPath: "\(logsDir)/app.log")
+        configureDestination(file)
+        file.minLevel = .info
+        logger.addDestination(file)
     }
 
     static func configureDestination(_ dest: BaseDestination) {
