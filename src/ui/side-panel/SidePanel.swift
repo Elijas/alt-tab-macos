@@ -5,13 +5,16 @@ class SidePanel: NSPanel {
     private static let offsetStep: CGFloat = 100
     private static let offsetDefaultsKey = "sidePanelYOffset"
     private static let leftAlignedDefaultsKey = "sidePanelLeftAligned"
+    private static let iconsOnlyDefaultsKey = "sidePanelIconsOnly"
 
     private static var isLeftAligned: Bool = UserDefaults.standard.bool(forKey: leftAlignedDefaultsKey)
+    private static var isIconsOnly: Bool = UserDefaults.standard.bool(forKey: iconsOnlyDefaultsKey)
 
     private let listView = WindowListView(separatorHeight: CGFloat(Preferences.sidePanelSeparatorSize), fontSize: CGFloat(Preferences.sidePanelFontSize), minWidth: SidePanelRow.panelWidth)
     let targetScreen: NSScreen
     private let buttonBar = NSView()
     private var lrButton: NSButton!
+    private var iconsOnlyButton: NSButton!
 
     private static var yOffset: CGFloat = {
         let defaults = UserDefaults.standard
@@ -50,17 +53,20 @@ class SidePanel: NSPanel {
         let downButton = makeButton("▼", #selector(shiftOffsetDown))
         let upButton = makeButton("▲", #selector(shiftOffsetUp))
         lrButton = makeButton(Self.isLeftAligned ? "▶" : "◀", #selector(toggleLeftRight))
+        iconsOnlyButton = makeButton(Self.isLeftAligned ? "◀" : "▶", #selector(toggleIconsOnly))
         let offButton = makeButton("off", #selector(turnOff))
         buttonBar.addSubview(hideButton)
         buttonBar.addSubview(downButton)
         buttonBar.addSubview(upButton)
         buttonBar.addSubview(lrButton)
+        buttonBar.addSubview(iconsOnlyButton)
         buttonBar.addSubview(offButton)
 
         hideButton.translatesAutoresizingMaskIntoConstraints = false
         downButton.translatesAutoresizingMaskIntoConstraints = false
         upButton.translatesAutoresizingMaskIntoConstraints = false
         lrButton.translatesAutoresizingMaskIntoConstraints = false
+        iconsOnlyButton.translatesAutoresizingMaskIntoConstraints = false
         offButton.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             hideButton.leadingAnchor.constraint(equalTo: buttonBar.leadingAnchor, constant: 4),
@@ -71,7 +77,9 @@ class SidePanel: NSPanel {
             upButton.centerYAnchor.constraint(equalTo: buttonBar.centerYAnchor),
             lrButton.leadingAnchor.constraint(equalTo: upButton.trailingAnchor, constant: 4),
             lrButton.centerYAnchor.constraint(equalTo: buttonBar.centerYAnchor),
-            offButton.leadingAnchor.constraint(equalTo: lrButton.trailingAnchor, constant: 4),
+            iconsOnlyButton.leadingAnchor.constraint(equalTo: lrButton.trailingAnchor, constant: 4),
+            iconsOnlyButton.centerYAnchor.constraint(equalTo: buttonBar.centerYAnchor),
+            offButton.leadingAnchor.constraint(equalTo: iconsOnlyButton.trailingAnchor, constant: 4),
             offButton.centerYAnchor.constraint(equalTo: buttonBar.centerYAnchor),
         ])
 
@@ -95,10 +103,23 @@ class SidePanel: NSPanel {
 
     override func mouseEntered(with event: NSEvent) {
         alphaValue = CGFloat(Preferences.sidePanelHoverOpacity) / 100
+        if Self.isIconsOnly { applyWidth(expanded: true) }
     }
 
     override func mouseExited(with event: NSEvent) {
         alphaValue = CGFloat(Preferences.sidePanelOpacity) / 100
+        if Self.isIconsOnly { applyWidth(expanded: false) }
+    }
+
+    private func applyWidth(expanded: Bool) {
+        let width = expanded ? SidePanelRow.panelWidth : SidePanelRow.compactPanelWidth
+        let screenFrame = targetScreen.visibleFrame
+        let x = Self.isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
+        var f = frame
+        f.origin.x = x
+        f.size.width = width
+        setFrame(f, display: true)
+        listView.applyIconsOnly(Self.isIconsOnly && !expanded)
     }
 
     func applyOpacity() {
@@ -137,6 +158,13 @@ class SidePanel: NSPanel {
         Self.isLeftAligned.toggle()
         UserDefaults.standard.set(Self.isLeftAligned, forKey: Self.leftAlignedDefaultsKey)
         lrButton.title = Self.isLeftAligned ? "▶" : "◀"
+        iconsOnlyButton.title = Self.isLeftAligned ? "◀" : "▶"
+        SidePanelManager.shared.refreshPanels()
+    }
+
+    @objc private func toggleIconsOnly() {
+        Self.isIconsOnly.toggle()
+        UserDefaults.standard.set(Self.isIconsOnly, forKey: Self.iconsOnlyDefaultsKey)
         SidePanelManager.shared.refreshPanels()
     }
 
@@ -159,6 +187,7 @@ class SidePanel: NSPanel {
     func updateContents(_ groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int? = nil, showTabHierarchy: Bool = false) {
         caTransaction {
             listView.showTabHierarchy = showTabHierarchy
+            listView.applyIconsOnly(Self.isIconsOnly)
             let contentHeight = listView.updateContents(groups, selectedWindowId: selectedWindowId, isActiveScreen: isActiveScreen, currentSpaceGroupIndex: currentSpaceGroupIndex)
 
             // reposition panel (clamp offset so panel edges stay on screen with buffer)
@@ -168,9 +197,10 @@ class SidePanel: NSPanel {
             // slack = how far the center can move before an edge hits the buffer zone
             let slack = max((screenFrame.height - panelHeight) / 2 - buffer, 0)
             let clampedOffset = min(max(Self.yOffset, -slack), slack)
-            let x = Self.isLeftAligned ? screenFrame.minX : screenFrame.maxX - SidePanelRow.panelWidth
+            let width = Self.isIconsOnly ? SidePanelRow.compactPanelWidth : SidePanelRow.panelWidth
+            let x = Self.isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
             let y = screenFrame.midY - panelHeight / 2 + clampedOffset
-            setFrame(CGRect(x: x, y: y, width: SidePanelRow.panelWidth, height: panelHeight), display: false)
+            setFrame(CGRect(x: x, y: y, width: width, height: panelHeight), display: false)
         }
     }
 }

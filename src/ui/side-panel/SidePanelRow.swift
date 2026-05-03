@@ -9,6 +9,7 @@ enum HighlightState {
 class SidePanelRow: NSView {
     static let iconSize: CGFloat = 20
     static let panelWidth: CGFloat = 260
+    static let compactPanelWidth: CGFloat = 56
 
     static func rowHeight(fontSize: CGFloat, wrapping: Bool) -> CGFloat {
         if wrapping {
@@ -104,6 +105,10 @@ class SidePanelRow: NSView {
         titleLabel.lineBreakMode = wrapping ? .byWordWrapping : .byTruncatingTail
         titleLabel.maximumNumberOfLines = wrapping ? 2 : 1
         titleLabel.cell?.wraps = wrapping
+    }
+
+    func setIconsOnly(_ iconsOnly: Bool) {
+        titleLabel.isHidden = iconsOnly
     }
 
     private func applyIndent() {

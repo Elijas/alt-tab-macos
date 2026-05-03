@@ -48,6 +48,10 @@ private class SpaceHeaderLabel: NSView {
         return size.height > singleLineHeight * 1.3 ? baseHeight * 2 : baseHeight
     }
 
+    func setIconsOnly(_ iconsOnly: Bool) {
+        titleLabel.isHidden = iconsOnly
+    }
+
     override func mouseDown(with event: NSEvent) {
         let alert = NSAlert()
         alert.messageText = "Rename Space \(displayIndex)"
@@ -96,9 +100,18 @@ class WindowListView: NSView {
     private let headerHeight: CGFloat
     private let fontSize: CGFloat
     private let wrapping: Bool
-    private let minWidth: CGFloat
+    private var minWidth: CGFloat
+    private var iconsOnly: Bool = false
     var showTabHierarchy: Bool = false
     var verticalFillEnabled: Bool = true
+
+    func applyIconsOnly(_ iconsOnly: Bool) {
+        self.iconsOnly = iconsOnly
+        self.minWidth = iconsOnly ? SidePanelRow.compactPanelWidth : SidePanelRow.panelWidth
+        for row in rowPool { row.setIconsOnly(iconsOnly) }
+        for header in spaceHeaderPool { header.setIconsOnly(iconsOnly) }
+        relayoutForBounds()
+    }
 
     init(separatorHeight: CGFloat = 7, fontSize: CGFloat = 12, wrapping: Bool = false, minWidth: CGFloat = 0) {
         self.separatorHeight = separatorHeight
@@ -222,6 +235,7 @@ class WindowListView: NSView {
         // grow row pool if needed
         while rowPool.count < totalRows {
             let row = SidePanelRow(fontSize: fontSize, wrapping: wrapping)
+            row.setIconsOnly(iconsOnly)
             rowPool.append(row)
             contentStackView.addSubview(row)
         }
@@ -236,6 +250,7 @@ class WindowListView: NSView {
         // grow space header pool if needed
         while spaceHeaderPool.count < headerCount {
             let header = SpaceHeaderLabel()
+            header.setIconsOnly(iconsOnly)
             spaceHeaderPool.append(header)
             contentStackView.addSubview(header)
         }
