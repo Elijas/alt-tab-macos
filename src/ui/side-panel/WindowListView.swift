@@ -324,6 +324,7 @@ class WindowListView: NSView {
                     emptyState = .none
                 }
                 row.showEmpty(highlightState: emptyState)
+                row.setIconsOnly(iconsOnly)
                 row.isHidden = false
                 layoutOrder.append(.row(rowIndex))
                 rowIndex += 1
@@ -340,6 +341,7 @@ class WindowListView: NSView {
                     }
                     let indented = showTabHierarchy && window.isTabChild
                     row.update(window, highlightState: state, isIndented: indented)
+                    row.setIconsOnly(iconsOnly)
                     row.isHidden = false
                     layoutOrder.append(.row(rowIndex))
                     rowIndex += 1

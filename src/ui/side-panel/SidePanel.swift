@@ -97,17 +97,21 @@ class SidePanel: NSPanel {
             buttonBar.trailingAnchor.constraint(equalTo: vibrancy.trailingAnchor),
             buttonBar.heightAnchor.constraint(equalToConstant: Self.buttonBarHeight),
         ])
+
+        buttonBar.isHidden = true
     }
 
     override var canBecomeKey: Bool { false }
 
     override func mouseEntered(with event: NSEvent) {
         alphaValue = CGFloat(Preferences.sidePanelHoverOpacity) / 100
+        buttonBar.isHidden = false
         if Self.isIconsOnly { applyWidth(expanded: true) }
     }
 
     override func mouseExited(with event: NSEvent) {
         alphaValue = CGFloat(Preferences.sidePanelOpacity) / 100
+        buttonBar.isHidden = true
         if Self.isIconsOnly { applyWidth(expanded: false) }
     }
 

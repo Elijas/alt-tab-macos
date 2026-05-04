@@ -9,7 +9,7 @@ enum HighlightState {
 class SidePanelRow: NSView {
     static let iconSize: CGFloat = 20
     static let panelWidth: CGFloat = 260
-    static let compactPanelWidth: CGFloat = 56
+    static let compactPanelWidth: CGFloat = 90
 
     static func rowHeight(fontSize: CGFloat, wrapping: Bool) -> CGFloat {
         if wrapping {
@@ -29,6 +29,7 @@ class SidePanelRow: NSView {
     private var trackingArea: NSTrackingArea?
     private var highlightState = HighlightState.none
     private var isHovered = false
+    private var fullTitle: String = ""
     private(set) var isIndented = false
     private(set) var isEmpty = false
 
@@ -76,7 +77,8 @@ class SidePanelRow: NSView {
         }
         let appName = window.application.localizedName ?? ""
         let windowTitle = window.title ?? ""
-        titleLabel.stringValue = windowTitle.isEmpty ? appName : windowTitle
+        fullTitle = windowTitle.isEmpty ? appName : windowTitle
+        titleLabel.stringValue = fullTitle
         titleLabel.textColor = .labelColor
         self.highlightState = highlightState
         self.isIndented = isIndented
@@ -108,7 +110,17 @@ class SidePanelRow: NSView {
     }
 
     func setIconsOnly(_ iconsOnly: Bool) {
-        titleLabel.isHidden = iconsOnly
+        if iconsOnly {
+            if isIndented || isEmpty {
+                titleLabel.isHidden = true
+            } else {
+                titleLabel.stringValue = String(fullTitle.prefix(5))
+                titleLabel.isHidden = false
+            }
+        } else {
+            titleLabel.stringValue = fullTitle
+            titleLabel.isHidden = false
+        }
     }
 
     private func applyIndent() {
