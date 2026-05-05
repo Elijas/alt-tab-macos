@@ -67,6 +67,12 @@ class Preferences {
             "groupTabsInSortOrder": "true",
             "separatorColorLight": "999999",
             "separatorColorDark": "666666",
+            "activeColorLight": "007AFF",
+            "activeColorDark": "0A84FF",
+            "hoverColorLight": "007AFF",
+            "hoverColorDark": "0A84FF",
+            "sidePanelCompactWidth": "90",
+            "sidePanelCompactLetters": "5",
             "sidePanelDisabledScreens": "[]",
             "spaceLabels": "{}",
         ]
@@ -153,6 +159,12 @@ class Preferences {
     static var groupTabsInSortOrder: Bool { CachedUserDefaults.bool("groupTabsInSortOrder") }
     static var separatorColorLight: String { CachedUserDefaults.string("separatorColorLight") }
     static var separatorColorDark: String { CachedUserDefaults.string("separatorColorDark") }
+    static var activeColorLight: String { CachedUserDefaults.string("activeColorLight") }
+    static var activeColorDark: String { CachedUserDefaults.string("activeColorDark") }
+    static var hoverColorLight: String { CachedUserDefaults.string("hoverColorLight") }
+    static var hoverColorDark: String { CachedUserDefaults.string("hoverColorDark") }
+    static var sidePanelCompactWidth: Int { CachedUserDefaults.int("sidePanelCompactWidth") }
+    static var sidePanelCompactLetters: Int { CachedUserDefaults.int("sidePanelCompactLetters") }
     static var sidePanelDisabledScreens: [String] { CachedUserDefaults.json("sidePanelDisabledScreens", [String].self) }
     static var spaceLabels: [String: String] { CachedUserDefaults.json("spaceLabels", [String: String].self) }
 

@@ -42,6 +42,11 @@ class MainPanel: NSWindow {
     override var canBecomeKey: Bool { true }
 
     func update(_ screenData: [ScreenColumnData]) {
+        let _perfStart = DispatchTime.now()
+        defer {
+            let ms = Double(DispatchTime.now().uptimeNanoseconds - _perfStart.uptimeNanoseconds) / 1_000_000
+            if ms > 30 { Logger.info { "[perf] MainPanel.update \(String(format: "%.1f", ms))ms cols=\(screenData.count)" } }
+        }
         guard let contentView else { return }
 
         // adjust column count to match screen count
@@ -147,6 +152,11 @@ class MainPanel: NSWindow {
     }
 
     private func layoutColumns() {
+        let _perfStart = DispatchTime.now()
+        defer {
+            let ms = Double(DispatchTime.now().uptimeNanoseconds - _perfStart.uptimeNanoseconds) / 1_000_000
+            if ms > 15 { Logger.info { "[perf] MainPanel.layoutColumns \(String(format: "%.1f", ms))ms cols=\(self.columns.count)" } }
+        }
         guard let contentView, !columns.isEmpty else { return }
         let bounds = contentView.bounds
 
@@ -200,7 +210,20 @@ class MainPanel: NSWindow {
 }
 
 extension MainPanel: NSWindowDelegate {
+    private static var resizeCount = 0
+    private static var resizeWindowStartNs: UInt64 = 0
+
     func windowDidResize(_ notification: Notification) {
+        let nowNs = DispatchTime.now().uptimeNanoseconds
+        if Self.resizeWindowStartNs == 0 { Self.resizeWindowStartNs = nowNs }
+        Self.resizeCount += 1
+        let elapsedMs = Double(nowNs - Self.resizeWindowStartNs) / 1_000_000
+        if elapsedMs > 250 {
+            let count = Self.resizeCount
+            Logger.info { "[perf] MainPanel windowDidResize fired \(count) times in \(String(format: "%.0f", elapsedMs))ms" }
+            Self.resizeCount = 0
+            Self.resizeWindowStartNs = nowNs
+        }
         layoutColumns()
     }
 

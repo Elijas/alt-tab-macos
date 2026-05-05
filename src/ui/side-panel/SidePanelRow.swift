@@ -9,7 +9,7 @@ enum HighlightState {
 class SidePanelRow: NSView {
     static let iconSize: CGFloat = 20
     static let panelWidth: CGFloat = 260
-    static let compactPanelWidth: CGFloat = 90
+    static var compactPanelWidth: CGFloat { CGFloat(Preferences.sidePanelCompactWidth) }
 
     static func rowHeight(fontSize: CGFloat, wrapping: Bool) -> CGFloat {
         if wrapping {
@@ -93,7 +93,8 @@ class SidePanelRow: NSView {
         isHovered = false
         iconLayer.isHidden = true
         iconLayer.contents = nil
-        titleLabel.stringValue = "(empty)"
+        fullTitle = "(empty)"
+        titleLabel.stringValue = fullTitle
         titleLabel.textColor = .secondaryLabelColor
         self.highlightState = highlightState
         self.isIndented = false
@@ -111,10 +112,11 @@ class SidePanelRow: NSView {
 
     func setIconsOnly(_ iconsOnly: Bool) {
         if iconsOnly {
-            if isIndented || isEmpty {
+            let n = Preferences.sidePanelCompactLetters
+            if isIndented || isEmpty || n == 0 {
                 titleLabel.isHidden = true
             } else {
-                titleLabel.stringValue = String(fullTitle.prefix(5))
+                titleLabel.stringValue = fullTitle.count > n ? String(fullTitle.prefix(n)) + "…" : fullTitle
                 titleLabel.isHidden = false
             }
         } else {
@@ -130,14 +132,15 @@ class SidePanelRow: NSView {
     }
 
     private func updateBackground() {
+        let isDark = NSAppearance.current.getThemeName() == .dark
         if isHovered {
-            let accent: NSColor = if #available(macOS 10.14, *) { .controlAccentColor } else { .alternateSelectedControlColor }
-            layer?.backgroundColor = accent.cgColor
+            let hex = isDark ? Preferences.hoverColorDark : Preferences.hoverColorLight
+            layer?.backgroundColor = NSColor(hex: hex).cgColor
         } else {
             switch highlightState {
             case .active:
-                let accent: NSColor = if #available(macOS 10.14, *) { .controlAccentColor } else { .alternateSelectedControlColor }
-                layer?.backgroundColor = accent.withAlphaComponent(0.6).cgColor
+                let hex = isDark ? Preferences.activeColorDark : Preferences.activeColorLight
+                layer?.backgroundColor = NSColor(hex: hex).withAlphaComponent(0.6).cgColor
             case .selected:
                 // KNOWN UNKNOWN: grey value (white: 0.5, alpha: 0.3) needs visual tuning against vibrancy material
                 layer?.backgroundColor = NSColor(white: 0.5, alpha: 0.3).cgColor

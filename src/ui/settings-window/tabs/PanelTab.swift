@@ -23,9 +23,43 @@ class PanelTab {
             separatorAction(sender)
         }
 
+        let rowColorAction: ActionClosure = { _ in SidePanelManager.shared.refreshPanels() }
+
+        let activeLightWell = NSColorWell()
+        activeLightWell.color = NSColor(hex: Preferences.activeColorLight)
+        activeLightWell.onAction = { sender in
+            Preferences.set("activeColorLight", (sender as! NSColorWell).color.hexString)
+            rowColorAction(sender)
+        }
+
+        let activeDarkWell = NSColorWell()
+        activeDarkWell.color = NSColor(hex: Preferences.activeColorDark)
+        activeDarkWell.onAction = { sender in
+            Preferences.set("activeColorDark", (sender as! NSColorWell).color.hexString)
+            rowColorAction(sender)
+        }
+
+        let hoverLightWell = NSColorWell()
+        hoverLightWell.color = NSColor(hex: Preferences.hoverColorLight)
+        hoverLightWell.onAction = { sender in
+            Preferences.set("hoverColorLight", (sender as! NSColorWell).color.hexString)
+            rowColorAction(sender)
+        }
+
+        let hoverDarkWell = NSColorWell()
+        hoverDarkWell.color = NSColor(hex: Preferences.hoverColorDark)
+        hoverDarkWell.onAction = { sender in
+            Preferences.set("hoverColorDark", (sender as! NSColorWell).color.hexString)
+            rowColorAction(sender)
+        }
+
         let commonTable = TableGroupView(title: "Common", width: SettingsWindow.contentWidth)
         commonTable.addRow(leftText: "Separator color (light)", rightViews: [lightColorWell])
         commonTable.addRow(leftText: "Separator color (dark)", rightViews: [darkColorWell])
+        commonTable.addRow(leftText: "Active row color (light)", rightViews: [activeLightWell])
+        commonTable.addRow(leftText: "Active row color (dark)", rightViews: [activeDarkWell])
+        commonTable.addRow(leftText: "Hover row color (light)", rightViews: [hoverLightWell])
+        commonTable.addRow(leftText: "Hover row color (dark)", rightViews: [hoverDarkWell])
 
         // "Side Panel" group
         let enableSwitch = LabelAndControl.makeSwitch("sidePanelEnabled", extraAction: { _ in
@@ -50,6 +84,8 @@ class PanelTab {
         let hoverSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelHoverOpacity", 0, 100, 0, false, "%", width: 140, extraAction: opacityAction)
         let sideSepSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelSeparatorSize", 0, 20, 0, false, "px", width: 140, extraAction: separatorAction)
         let sideFontSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelFontSize", 9, 30, 0, false, "pt", width: 140, extraAction: sidePanelRebuildAction)
+        let compactWidthSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelCompactWidth", 30, 260, 0, false, "px", width: 140, extraAction: rowColorAction)
+        let compactLettersSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelCompactLetters", 0, 30, 0, false, "", width: 140, extraAction: rowColorAction)
 
         let sideTable = TableGroupView(title: "Side Panel", width: SettingsWindow.contentWidth)
         sideTable.addRow(enable)
@@ -57,6 +93,8 @@ class PanelTab {
         sideTable.addRow(leftText: NSLocalizedString("Hover opacity", comment: ""), rightViews: [hoverSlider[1], hoverSlider[2]])
         sideTable.addRow(leftText: "Space separator", rightViews: [sideSepSlider[1], sideSepSlider[2]])
         sideTable.addRow(leftText: "Font size", rightViews: [sideFontSlider[1], sideFontSlider[2]])
+        sideTable.addRow(leftText: "Compact width", rightViews: [compactWidthSlider[1], compactWidthSlider[2]])
+        sideTable.addRow(leftText: "Compact letters", rightViews: [compactLettersSlider[1], compactLettersSlider[2]])
 
         let tabHierarchySwitch = LabelAndControl.makeSwitch("showTabHierarchyInSidePanel", extraAction: { _ in
             SidePanelManager.shared.refreshPanels()
