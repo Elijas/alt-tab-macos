@@ -142,8 +142,8 @@ class SidePanelRow: NSView {
                 let hex = isDark ? Preferences.activeColorDark : Preferences.activeColorLight
                 layer?.backgroundColor = NSColor(hex: hex).withAlphaComponent(0.6).cgColor
             case .selected:
-                // KNOWN UNKNOWN: grey value (white: 0.5, alpha: 0.3) needs visual tuning against vibrancy material
-                layer?.backgroundColor = NSColor(white: 0.5, alpha: 0.3).cgColor
+                let hex = isDark ? Preferences.selectedColorDark : Preferences.selectedColorLight
+                layer?.backgroundColor = NSColor(hex: hex).withAlphaComponent(0.6).cgColor
             case .none:
                 layer?.backgroundColor = nil
             }

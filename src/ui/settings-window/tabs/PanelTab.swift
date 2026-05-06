@@ -39,6 +39,20 @@ class PanelTab {
             rowColorAction(sender)
         }
 
+        let selectedLightWell = NSColorWell()
+        selectedLightWell.color = NSColor(hex: Preferences.selectedColorLight)
+        selectedLightWell.onAction = { sender in
+            Preferences.set("selectedColorLight", (sender as! NSColorWell).color.hexString)
+            rowColorAction(sender)
+        }
+
+        let selectedDarkWell = NSColorWell()
+        selectedDarkWell.color = NSColor(hex: Preferences.selectedColorDark)
+        selectedDarkWell.onAction = { sender in
+            Preferences.set("selectedColorDark", (sender as! NSColorWell).color.hexString)
+            rowColorAction(sender)
+        }
+
         let hoverLightWell = NSColorWell()
         hoverLightWell.color = NSColor(hex: Preferences.hoverColorLight)
         hoverLightWell.onAction = { sender in
@@ -58,6 +72,8 @@ class PanelTab {
         commonTable.addRow(leftText: "Separator color (dark)", rightViews: [darkColorWell])
         commonTable.addRow(leftText: "Active row color (light)", rightViews: [activeLightWell])
         commonTable.addRow(leftText: "Active row color (dark)", rightViews: [activeDarkWell])
+        commonTable.addRow(leftText: "Selected row color (light)", rightViews: [selectedLightWell])
+        commonTable.addRow(leftText: "Selected row color (dark)", rightViews: [selectedDarkWell])
         commonTable.addRow(leftText: "Hover row color (light)", rightViews: [hoverLightWell])
         commonTable.addRow(leftText: "Hover row color (dark)", rightViews: [hoverDarkWell])
 

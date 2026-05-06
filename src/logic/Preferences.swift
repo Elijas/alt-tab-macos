@@ -69,6 +69,8 @@ class Preferences {
             "separatorColorDark": "666666",
             "activeColorLight": "007AFF",
             "activeColorDark": "0A84FF",
+            "selectedColorLight": "808080",
+            "selectedColorDark": "A0A0A0",
             "hoverColorLight": "007AFF",
             "hoverColorDark": "0A84FF",
             "sidePanelCompactWidth": "90",
@@ -161,6 +163,8 @@ class Preferences {
     static var separatorColorDark: String { CachedUserDefaults.string("separatorColorDark") }
     static var activeColorLight: String { CachedUserDefaults.string("activeColorLight") }
     static var activeColorDark: String { CachedUserDefaults.string("activeColorDark") }
+    static var selectedColorLight: String { CachedUserDefaults.string("selectedColorLight") }
+    static var selectedColorDark: String { CachedUserDefaults.string("selectedColorDark") }
     static var hoverColorLight: String { CachedUserDefaults.string("hoverColorLight") }
     static var hoverColorDark: String { CachedUserDefaults.string("hoverColorDark") }
     static var sidePanelCompactWidth: Int { CachedUserDefaults.int("sidePanelCompactWidth") }
