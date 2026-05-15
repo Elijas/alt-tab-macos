@@ -102,14 +102,10 @@ class Windows {
         refreshWhichWindowsToShowTheUser()
         // Fork: compute tab groups and group sort keys for tab-aware sorting
         TabHierarchy.computeAndApply(list)
+        TabHierarchy.applyParentMap(TabHierarchy.lastParentMap, to: list)
         sort()
         // Fork: reorder for tab hierarchy display in main panel
         if Preferences.showTabHierarchyInMainPanel {
-            for window in list {
-                if let wid = window.cgWindowId {
-                    window.parentWindowId = TabHierarchy.lastParentMap[wid] ?? 0
-                }
-            }
             list = TabHierarchy.orderWithTabHierarchy(list)
         }
         return true

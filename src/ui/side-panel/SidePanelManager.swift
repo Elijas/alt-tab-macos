@@ -193,13 +193,16 @@ class SidePanelManager {
         for window in Windows.list {
             if let wid = window.cgWindowId { windowByCgId[wid] = window }
         }
+        let windows = Array(windowByCgId.values)
 
         // Compute tab parent map when any tab-aware feature needs it (AX IPC is expensive)
         let needsTabInfo = Preferences.showTabHierarchyInSidePanel || Preferences.showTabHierarchyInMainPanel || Preferences.groupTabsInSortOrder
-        let tabParentMap: [CGWindowID: CGWindowID] = needsTabInfo ? TabHierarchy.queryAXTabGroups(Array(windowByCgId.values)) : [:]
+        let visibleWindowIds = needsTabInfo ? TabHierarchy.visibleWindowIds(in: Spaces.screenSpacesMap.values.flatMap { $0 }) : Set<CGWindowID>()
+        let tabParentMap: [CGWindowID: CGWindowID] = needsTabInfo ? TabHierarchy.queryAXTabGroups(windows, visibleWindowIds: visibleWindowIds) : [:]
+        TabHierarchy.applyParentMap(tabParentMap, to: windows)
         let groupCreationKeys: [CGWindowID: Int]
         if Preferences.groupTabsInSortOrder {
-            groupCreationKeys = TabHierarchy.groupSortKeys(Array(windowByCgId.values), tabParentMap: tabParentMap, keyPath: \.creationOrder)
+            groupCreationKeys = TabHierarchy.groupSortKeys(windows, tabParentMap: tabParentMap, keyPath: \.creationOrder)
         } else {
             groupCreationKeys = [:]
         }
@@ -219,7 +222,7 @@ class SidePanelManager {
             guard let screenUuid = screen.cachedUuid() else { continue }
 
             // side panel data (uses side panel pref)
-            let sidePanelResult = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInSidePanel, tabParentMap: tabParentMap, groupCreationKeys: groupCreationKeys)
+            let sidePanelResult = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInSidePanel, tabParentMap: tabParentMap, visibleWindowIds: visibleWindowIds, groupCreationKeys: groupCreationKeys)
             sidePanelResults.append((screenUuid, sidePanelResult))
 
             // main panel data (uses main panel pref)
@@ -230,7 +233,7 @@ class SidePanelManager {
                 let index = NSScreen.screens.firstIndex(of: screen).map { $0 + 1 } ?? 0
                 screenName = "Screen \(index)"
             }
-            let wpResult = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInMainPanel, tabParentMap: tabParentMap, groupCreationKeys: groupCreationKeys)
+            let wpResult = buildScreenGroups(screenUuid: screenUuid, windowByCgId: windowByCgId, panelWindowNumbers: panelWindowNumbers, showTabHierarchy: Preferences.showTabHierarchyInMainPanel, tabParentMap: tabParentMap, visibleWindowIds: visibleWindowIds, groupCreationKeys: groupCreationKeys)
             allScreenData.append(ScreenColumnData(
                 screenName: screenName,
                 screenId: screenUuid as String,
@@ -253,6 +256,7 @@ class SidePanelManager {
         panelWindowNumbers: Set<Int>,
         showTabHierarchy: Bool,
         tabParentMap: [CGWindowID: CGWindowID],
+        visibleWindowIds: Set<CGWindowID>,
         groupCreationKeys: [CGWindowID: Int]
     ) -> (groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int?, spaceIndexes: [SpaceIndex], spaceIds: [CGSSpaceID]) {
         let screenSpaces = Spaces.screenSpacesMap[screenUuid] ?? []
@@ -266,13 +270,7 @@ class SidePanelManager {
 
         let currentSpaceId = Spaces.currentSpaceForScreen[screenUuid]
 
-        // Tab parent map is precomputed in refreshPanelsNow; apply display parentage only when tabs shown
         let showTabs = showTabHierarchy
-        if showTabs {
-            for (childWid, parentWid) in tabParentMap {
-                windowByCgId[childWid]?.parentWindowId = parentWid
-            }
-        }
 
         // per-space grouping
         var groups = [[Window]]()
@@ -283,22 +281,11 @@ class SidePanelManager {
             // only non-invisible (non-tabbed) windows on this space
             let visibleOnSpace = Set(Spaces.windowsInSpaces([spaceId], false))
 
-            // A visible window can never be a tab child — in macOS native tabs only one
-            // tab per group is on-screen at a time. This corrects stale parentWindowId
-            // from queryAXTabGroups when the active tab switches (the newly visible
-            // window may have nil axUiElement from when it was invisible, causing the
-            // AX query to misclassify it as a child).
-            if showTabs {
-                for wid in visibleOnSpace {
-                    windowByCgId[wid]?.parentWindowId = 0
-                }
-            }
-
             var group = [Window]()
             for wid in allOnSpace {
                 let isVisible = visibleOnSpace.contains(wid)
                 if let window = windowByCgId[wid] {
-                    let isTab = showTabs && window.isTabChild
+                    let isTab = showTabs && tabParentMap[wid] != nil && !visibleWindowIds.contains(wid)
                     let dominated = seen.contains(wid)
                         || window.isWindowlessApp
                         || window.isMinimized
@@ -317,7 +304,7 @@ class SidePanelManager {
                 for (childWid, parentWid) in tabParentMap {
                     if groupWids.contains(parentWid),
                        !seen.contains(childWid),
-                       !visibleOnSpace.contains(childWid),
+                       !visibleWindowIds.contains(childWid),
                        let window = windowByCgId[childWid],
                        !self.isExcluded(window),
                        !panelWindowNumbers.contains(Int(childWid)) {

@@ -26,6 +26,13 @@ class TabHierarchy {
         }
     }
 
+    static func applyParentMap(_ parentMap: [CGWindowID: CGWindowID], to windows: [Window]) {
+        for window in windows {
+            guard let wid = window.cgWindowId else { continue }
+            window.parentWindowId = parentMap[wid] ?? 0
+        }
+    }
+
     /// Look up group-aware lastFocusOrder; falls back to window's own value.
     static func effectiveLastFocusOrder(_ window: Window) -> Int {
         if let wid = window.cgWindowId, let key = groupLastFocusKeys[wid] {
@@ -92,11 +99,12 @@ class TabHierarchy {
     /// Walks each visible window's AXChildren for AXTabGroup, reads tab titles,
     /// then matches any window by (PID, title). Does NOT depend on isTabbed flag
     /// since that requires detectTabbedWindows which the side panel path doesn't call.
-    /// On title collision across tab groups, first match wins — acceptable since rare.
-    static func queryAXTabGroups(_ windows: [Window]) -> [CGWindowID: CGWindowID] {
+    /// On title collision across tab groups, skip the ambiguous title rather than assigning it to the wrong parent.
+    static func queryAXTabGroups(_ windows: [Window], visibleWindowIds providedVisibleWindowIds: Set<CGWindowID>? = nil) -> [CGWindowID: CGWindowID] {
         var result = [CGWindowID: CGWindowID]()
-        // forward map: "pid:title" → parentWid (from visible windows' AX tab groups)
-        var titleToParent = [String: CGWindowID]()
+        let visibleWindowIds = providedVisibleWindowIds ?? visibleWindowIds(for: windows)
+        // forward map: "pid:title" → parentWids (from visible windows' AX tab groups)
+        var titleToParents = [String: Set<CGWindowID>]()
         // collect which wids are "parent" windows (have an AXTabGroup)
         var parentWids = Set<CGWindowID>()
         for window in windows {
@@ -115,20 +123,22 @@ class TabHierarchy {
                           tabAttrs.role == "AXRadioButton",
                           let title = tabAttrs.title, !title.isEmpty else { continue }
                     let key = "\(window.application.pid):\(title)"
-                    if titleToParent[key] == nil {
-                        titleToParent[key] = wid
-                    }
+                    titleToParents[key, default: []].insert(wid)
                 }
             }
         }
         // match windows by (pid, title) — a window is a tab child if its title
         // appears in a parent's AXTabGroup and it's not the parent itself
         for window in windows {
-            guard let wid = window.cgWindowId, !parentWids.contains(wid) else { continue }
+            guard let wid = window.cgWindowId,
+                  !parentWids.contains(wid),
+                  !visibleWindowIds.contains(wid) else { continue }
             let title = window.title ?? ""
             guard !title.isEmpty else { continue }
             let key = "\(window.application.pid):\(title)"
-            if let parentWid = titleToParent[key] {
+            if let parentWids = titleToParents[key],
+               parentWids.count == 1,
+               let parentWid = parentWids.first {
                 result[wid] = parentWid
             }
         }
@@ -151,6 +161,7 @@ class TabHierarchy {
                 guard let wid = window.cgWindowId,
                       !alreadyMapped.contains(wid),
                       !parentWids.contains(wid),
+                      !visibleWindowIds.contains(wid),
                       result[wid] == nil,
                       window.spaceIds.allSatisfy({ $0 == CGSSpaceID.max }),
                       let candidates = fullscreenParentsByPid[window.application.pid],
@@ -178,6 +189,21 @@ class TabHierarchy {
         }
 
         return result
+    }
+
+    static func visibleWindowIds(in spaceIds: [CGSSpaceID]) -> Set<CGWindowID> {
+        var result = Set<CGWindowID>()
+        for spaceId in Set(spaceIds) {
+            result.formUnion(Spaces.windowsInSpaces([spaceId], false))
+        }
+        return result
+    }
+
+    private static func visibleWindowIds(for windows: [Window]) -> Set<CGWindowID> {
+        let spaceIds = windows.flatMap { window in
+            window.spaceIds.filter { $0 != CGSSpaceID.max }
+        }
+        return visibleWindowIds(in: spaceIds)
     }
 
     // MARK: - Group sort keys

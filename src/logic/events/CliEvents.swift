@@ -60,11 +60,7 @@ class CliServer {
             }
             // compute tab parent relationships via AX tab groups
             let parentMap = TabHierarchy.queryAXTabGroups(Windows.list)
-            for window in Windows.list {
-                if let wid = window.cgWindowId {
-                    window.parentWindowId = parentMap[wid] ?? 0
-                }
-            }
+            TabHierarchy.applyParentMap(parentMap, to: Windows.list)
             let windows = Windows.list
                 .filter { !$0.isWindowlessApp }
                 .map {
