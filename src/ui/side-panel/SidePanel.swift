@@ -132,7 +132,7 @@ class SidePanel: NSPanel {
         var f = frame
         f.origin.x = x
         f.size.width = width
-        setFrame(f, display: true)
+        setFrameIfNeeded(f, display: true)
         listView.applyIconsOnly(usesCompactLayout)
     }
 
@@ -141,13 +141,22 @@ class SidePanel: NSPanel {
         buttonBar.isHidden = !isMouseInside
     }
 
-    private func refreshMouseInside() {
-        guard isMouseInside && !frame.contains(NSEvent.mouseLocation) else { return }
-        isMouseInside = false
+    private func syncMouseInside() {
+        let containsMouse = frame.contains(NSEvent.mouseLocation)
+        guard isMouseInside != containsMouse else { return }
+        isMouseInside = containsMouse
+    }
+
+    private func setFrameIfNeeded(_ newFrame: NSRect, display: Bool) {
+        guard abs(frame.origin.x - newFrame.origin.x) > 0.5
+            || abs(frame.origin.y - newFrame.origin.y) > 0.5
+            || abs(frame.width - newFrame.width) > 0.5
+            || abs(frame.height - newFrame.height) > 0.5 else { return }
+        setFrame(newFrame, display: display)
     }
 
     func applyOpacity() {
-        refreshMouseInside()
+        syncMouseInside()
         applyHoverState()
     }
 
@@ -213,7 +222,7 @@ class SidePanel: NSPanel {
 
     func updateContents(_ groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int? = nil, showTabHierarchy: Bool = false) {
         caTransaction {
-            refreshMouseInside()
+            syncMouseInside()
             applyHoverState()
             listView.showTabHierarchy = showTabHierarchy
             listView.applyIconsOnly(usesCompactLayout)
@@ -229,7 +238,7 @@ class SidePanel: NSPanel {
             let width = currentWidth
             let x = Self.isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
             let y = screenFrame.midY - panelHeight / 2 + clampedOffset
-            setFrame(CGRect(x: x, y: y, width: width, height: panelHeight), display: false)
+            setFrameIfNeeded(CGRect(x: x, y: y, width: width, height: panelHeight), display: false)
         }
     }
 }
