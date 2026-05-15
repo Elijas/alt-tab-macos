@@ -12,9 +12,14 @@ class SidePanel: NSPanel {
 
     private let listView = WindowListView(separatorHeight: CGFloat(Preferences.sidePanelSeparatorSize), fontSize: CGFloat(Preferences.sidePanelFontSize), minWidth: SidePanelRow.panelWidth)
     let targetScreen: NSScreen
+    private let panelRoot = NSView()
+    private let panelBody = NSVisualEffectView()
     private let buttonBar = NSView()
     private var lrButton: NSButton!
     private var iconsOnlyButton: NSButton!
+    private var panelBodyWidthConstraint: NSLayoutConstraint!
+    private var panelBodyLeadingConstraint: NSLayoutConstraint!
+    private var panelBodyTrailingConstraint: NSLayoutConstraint!
     private var isMouseInside = false
 
     private static var yOffset: CGFloat = {
@@ -30,25 +35,30 @@ class SidePanel: NSPanel {
         animationBehavior = .none
         titleVisibility = .hidden
         backgroundColor = .clear
+        isOpaque = false
         collectionBehavior = .canJoinAllSpaces
         level = .floating
         alphaValue = CGFloat(Preferences.sidePanelOpacity) / 100
         setAccessibilitySubrole(.unknown)
 
-        let vibrancy = NSVisualEffectView()
-        vibrancy.material = .sidebar  // KNOWN UNKNOWN: .sidebar vs .hudWindow - depends on final visual design
-        vibrancy.blendingMode = .behindWindow
-        vibrancy.state = .active
-        vibrancy.wantsLayer = true
-        vibrancy.layer?.cornerRadius = 8
-        contentView = vibrancy
+        panelRoot.wantsLayer = true
+        panelRoot.layer?.backgroundColor = NSColor.clear.cgColor
+        contentView = panelRoot
 
         let trackingArea = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self)
-        vibrancy.addTrackingArea(trackingArea)
+        panelRoot.addTrackingArea(trackingArea)
+
+        panelBody.translatesAutoresizingMaskIntoConstraints = false
+        panelBody.material = .sidebar  // KNOWN UNKNOWN: .sidebar vs .hudWindow - depends on final visual design
+        panelBody.blendingMode = .behindWindow
+        panelBody.state = .active
+        panelBody.wantsLayer = true
+        panelBody.layer?.cornerRadius = 8
+        panelRoot.addSubview(panelBody)
 
         // button bar at bottom
         buttonBar.translatesAutoresizingMaskIntoConstraints = false
-        vibrancy.addSubview(buttonBar)
+        panelBody.addSubview(buttonBar)
 
         let hideButton = makeButton("hide 10s", #selector(hideTenSeconds))
         let downButton = makeButton("▼", #selector(shiftOffsetDown))
@@ -85,19 +95,27 @@ class SidePanel: NSPanel {
         ])
 
         // list view (shared row/separator layout)
-        vibrancy.addSubview(listView)
+        panelBody.addSubview(listView)
 
+        panelBodyWidthConstraint = panelBody.widthAnchor.constraint(equalToConstant: currentWidth)
+        panelBodyLeadingConstraint = panelBody.leadingAnchor.constraint(equalTo: panelRoot.leadingAnchor)
+        panelBodyTrailingConstraint = panelBody.trailingAnchor.constraint(equalTo: panelRoot.trailingAnchor)
         NSLayoutConstraint.activate([
-            listView.topAnchor.constraint(equalTo: vibrancy.topAnchor, constant: 4),
-            listView.bottomAnchor.constraint(equalTo: buttonBar.topAnchor),
-            listView.leadingAnchor.constraint(equalTo: vibrancy.leadingAnchor),
-            listView.trailingAnchor.constraint(equalTo: vibrancy.trailingAnchor),
+            panelBody.topAnchor.constraint(equalTo: panelRoot.topAnchor),
+            panelBody.bottomAnchor.constraint(equalTo: panelRoot.bottomAnchor),
+            panelBodyWidthConstraint,
 
-            buttonBar.bottomAnchor.constraint(equalTo: vibrancy.bottomAnchor),
-            buttonBar.leadingAnchor.constraint(equalTo: vibrancy.leadingAnchor),
-            buttonBar.trailingAnchor.constraint(equalTo: vibrancy.trailingAnchor),
+            listView.topAnchor.constraint(equalTo: panelBody.topAnchor, constant: 4),
+            listView.bottomAnchor.constraint(equalTo: buttonBar.topAnchor),
+            listView.leadingAnchor.constraint(equalTo: panelBody.leadingAnchor),
+            listView.trailingAnchor.constraint(equalTo: panelBody.trailingAnchor),
+
+            buttonBar.bottomAnchor.constraint(equalTo: panelBody.bottomAnchor),
+            buttonBar.leadingAnchor.constraint(equalTo: panelBody.leadingAnchor),
+            buttonBar.trailingAnchor.constraint(equalTo: panelBody.trailingAnchor),
             buttonBar.heightAnchor.constraint(equalToConstant: Self.buttonBarHeight),
         ])
+        applyBodyAlignment()
 
         buttonBar.isHidden = true
     }
@@ -126,14 +144,14 @@ class SidePanel: NSPanel {
     }
 
     private func applyCurrentWidth() {
-        let width = currentWidth
-        let screenFrame = targetScreen.visibleFrame
-        let x = Self.isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
-        var f = frame
-        f.origin.x = x
-        f.size.width = width
-        setFrameIfNeeded(f, display: true)
+        panelBodyWidthConstraint.constant = currentWidth
+        panelRoot.layoutSubtreeIfNeeded()
         listView.applyIconsOnly(usesCompactLayout)
+    }
+
+    private func applyBodyAlignment() {
+        panelBodyLeadingConstraint.isActive = Self.isLeftAligned
+        panelBodyTrailingConstraint.isActive = !Self.isLeftAligned
     }
 
     private func applyHoverState() {
@@ -193,7 +211,8 @@ class SidePanel: NSPanel {
         UserDefaults.standard.set(Self.isLeftAligned, forKey: Self.leftAlignedDefaultsKey)
         lrButton.title = Self.isLeftAligned ? "▶" : "◀"
         iconsOnlyButton.title = Self.isLeftAligned ? "◀" : "▶"
-        if Self.isIconsOnly { applyCurrentWidth() }
+        applyBodyAlignment()
+        applyCurrentWidth()
         SidePanelManager.shared.refreshPanels()
     }
 
@@ -235,7 +254,7 @@ class SidePanel: NSPanel {
             // slack = how far the center can move before an edge hits the buffer zone
             let slack = max((screenFrame.height - panelHeight) / 2 - buffer, 0)
             let clampedOffset = min(max(Self.yOffset, -slack), slack)
-            let width = currentWidth
+            let width = SidePanelRow.panelWidth
             let x = Self.isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
             let y = screenFrame.midY - panelHeight / 2 + clampedOffset
             setFrameIfNeeded(CGRect(x: x, y: y, width: width, height: panelHeight), display: false)
