@@ -123,16 +123,11 @@ class SidePanel: NSPanel {
     override var canBecomeKey: Bool { false }
 
     override func mouseEntered(with event: NSEvent) {
-        isMouseInside = true
-        applyHoverState()
-        if Self.isIconsOnly { applyCurrentWidth() }
+        syncHover(at: NSEvent.mouseLocation)
     }
 
     override func mouseExited(with event: NSEvent) {
-        guard !frame.contains(NSEvent.mouseLocation) else { return }
-        isMouseInside = false
-        applyHoverState()
-        if Self.isIconsOnly { applyCurrentWidth() }
+        syncHover(at: NSEvent.mouseLocation)
     }
 
     private var usesCompactLayout: Bool {
@@ -159,10 +154,12 @@ class SidePanel: NSPanel {
         buttonBar.isHidden = !isMouseInside
     }
 
-    private func syncMouseInside() {
-        let containsMouse = frame.contains(NSEvent.mouseLocation)
+    func syncHover(at location: NSPoint) {
+        let containsMouse = frame.contains(location)
         guard isMouseInside != containsMouse else { return }
         isMouseInside = containsMouse
+        applyHoverState()
+        if Self.isIconsOnly { applyCurrentWidth() }
     }
 
     private func setFrameIfNeeded(_ newFrame: NSRect, display: Bool) {
@@ -174,7 +171,7 @@ class SidePanel: NSPanel {
     }
 
     func applyOpacity() {
-        syncMouseInside()
+        syncHover(at: NSEvent.mouseLocation)
         applyHoverState()
     }
 
@@ -241,7 +238,7 @@ class SidePanel: NSPanel {
 
     func updateContents(_ groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int? = nil, showTabHierarchy: Bool = false) {
         caTransaction {
-            syncMouseInside()
+            syncHover(at: NSEvent.mouseLocation)
             applyHoverState()
             listView.showTabHierarchy = showTabHierarchy
             listView.applyIconsOnly(usesCompactLayout)

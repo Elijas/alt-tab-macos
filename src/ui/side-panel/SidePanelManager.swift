@@ -12,6 +12,8 @@ class SidePanelManager {
     private var resolvedExceptions: [ExceptionEntry]?
     private var discoveryTimer: Timer?
     private var separatorDebounce: DispatchWorkItem?
+    private var localMouseMonitor: Any?
+    private var globalMouseMonitor: Any?
 
     private init() {}
 
@@ -21,6 +23,7 @@ class SidePanelManager {
 
     func setup() {
         guard Preferences.sidePanelEnabled else { return }
+        startMouseTracking()
         // force-discover windows on all spaces that AX events may have missed
         Applications.addMissingWindows()
         rebuildPanelsForScreenChange()
@@ -70,6 +73,7 @@ class SidePanelManager {
     }
 
     func tearDown() {
+        stopMouseTracking()
         discoveryTimer?.invalidate()
         discoveryTimer = nil
         for (_, panel) in panels {
@@ -115,6 +119,35 @@ class SidePanelManager {
 
         // populate immediately
         refreshPanelsNow()
+    }
+
+    private func startMouseTracking() {
+        guard localMouseMonitor == nil && globalMouseMonitor == nil else { return }
+        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+            self?.syncHover()
+            return event
+        }
+        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+            self?.syncHover()
+        }
+    }
+
+    private func stopMouseTracking() {
+        if let localMouseMonitor {
+            NSEvent.removeMonitor(localMouseMonitor)
+            self.localMouseMonitor = nil
+        }
+        if let globalMouseMonitor {
+            NSEvent.removeMonitor(globalMouseMonitor)
+            self.globalMouseMonitor = nil
+        }
+    }
+
+    private func syncHover() {
+        let location = NSEvent.mouseLocation
+        for panel in panels.values {
+            panel.syncHover(at: location)
+        }
     }
 
     // MARK: - Main Panel
