@@ -15,6 +15,7 @@ class SidePanel: NSPanel {
     private let buttonBar = NSView()
     private var lrButton: NSButton!
     private var iconsOnlyButton: NSButton!
+    private var isMouseInside = false
 
     private static var yOffset: CGFloat = {
         let defaults = UserDefaults.standard
@@ -104,30 +105,59 @@ class SidePanel: NSPanel {
     override var canBecomeKey: Bool { false }
 
     override func mouseEntered(with event: NSEvent) {
-        alphaValue = CGFloat(Preferences.sidePanelHoverOpacity) / 100
-        buttonBar.isHidden = false
-        if Self.isIconsOnly { applyWidth(expanded: true) }
+        isMouseInside = true
+        applyHoverState()
+        if Self.isIconsOnly { applyCurrentWidth() }
     }
 
     override func mouseExited(with event: NSEvent) {
-        alphaValue = CGFloat(Preferences.sidePanelOpacity) / 100
-        buttonBar.isHidden = true
-        if Self.isIconsOnly { applyWidth(expanded: false) }
+        guard !frame.contains(NSEvent.mouseLocation) else { return }
+        isMouseInside = false
+        applyHoverState()
+        if Self.isIconsOnly { applyCurrentWidth() }
     }
 
-    private func applyWidth(expanded: Bool) {
-        let width = expanded ? SidePanelRow.panelWidth : SidePanelRow.compactPanelWidth
+    private var usesCompactLayout: Bool {
+        Self.isIconsOnly && !isMouseInside
+    }
+
+    private var currentWidth: CGFloat {
+        usesCompactLayout ? SidePanelRow.compactPanelWidth : SidePanelRow.panelWidth
+    }
+
+    private func applyCurrentWidth() {
+        let width = currentWidth
         let screenFrame = targetScreen.visibleFrame
         let x = Self.isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
         var f = frame
         f.origin.x = x
         f.size.width = width
-        setFrame(f, display: true)
-        listView.applyIconsOnly(Self.isIconsOnly && !expanded)
+        setFrameIfNeeded(f, display: true)
+        listView.applyIconsOnly(usesCompactLayout)
+    }
+
+    private func applyHoverState() {
+        alphaValue = CGFloat(isMouseInside ? Preferences.sidePanelHoverOpacity : Preferences.sidePanelOpacity) / 100
+        buttonBar.isHidden = !isMouseInside
+    }
+
+    private func syncMouseInside() {
+        let containsMouse = frame.contains(NSEvent.mouseLocation)
+        guard isMouseInside != containsMouse else { return }
+        isMouseInside = containsMouse
+    }
+
+    private func setFrameIfNeeded(_ newFrame: NSRect, display: Bool) {
+        guard abs(frame.origin.x - newFrame.origin.x) > 0.5
+            || abs(frame.origin.y - newFrame.origin.y) > 0.5
+            || abs(frame.width - newFrame.width) > 0.5
+            || abs(frame.height - newFrame.height) > 0.5 else { return }
+        setFrame(newFrame, display: display)
     }
 
     func applyOpacity() {
-        alphaValue = CGFloat(Preferences.sidePanelOpacity) / 100
+        syncMouseInside()
+        applyHoverState()
     }
 
     private func makeButton(_ title: String, _ action: Selector) -> NSButton {
@@ -163,12 +193,14 @@ class SidePanel: NSPanel {
         UserDefaults.standard.set(Self.isLeftAligned, forKey: Self.leftAlignedDefaultsKey)
         lrButton.title = Self.isLeftAligned ? "▶" : "◀"
         iconsOnlyButton.title = Self.isLeftAligned ? "◀" : "▶"
+        if Self.isIconsOnly { applyCurrentWidth() }
         SidePanelManager.shared.refreshPanels()
     }
 
     @objc private func toggleIconsOnly() {
         Self.isIconsOnly.toggle()
         UserDefaults.standard.set(Self.isIconsOnly, forKey: Self.iconsOnlyDefaultsKey)
+        applyCurrentWidth()
         SidePanelManager.shared.refreshPanels()
     }
 
@@ -190,8 +222,10 @@ class SidePanel: NSPanel {
 
     func updateContents(_ groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int? = nil, showTabHierarchy: Bool = false) {
         caTransaction {
+            syncMouseInside()
+            applyHoverState()
             listView.showTabHierarchy = showTabHierarchy
-            listView.applyIconsOnly(Self.isIconsOnly)
+            listView.applyIconsOnly(usesCompactLayout)
             let contentHeight = listView.updateContents(groups, selectedWindowId: selectedWindowId, isActiveScreen: isActiveScreen, currentSpaceGroupIndex: currentSpaceGroupIndex)
 
             // reposition panel (clamp offset so panel edges stay on screen with buffer)
@@ -201,10 +235,10 @@ class SidePanel: NSPanel {
             // slack = how far the center can move before an edge hits the buffer zone
             let slack = max((screenFrame.height - panelHeight) / 2 - buffer, 0)
             let clampedOffset = min(max(Self.yOffset, -slack), slack)
-            let width = Self.isIconsOnly ? SidePanelRow.compactPanelWidth : SidePanelRow.panelWidth
+            let width = currentWidth
             let x = Self.isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
             let y = screenFrame.midY - panelHeight / 2 + clampedOffset
-            setFrame(CGRect(x: x, y: y, width: width, height: panelHeight), display: false)
+            setFrameIfNeeded(CGRect(x: x, y: y, width: width, height: panelHeight), display: false)
         }
     }
 }
