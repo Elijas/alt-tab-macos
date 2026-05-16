@@ -245,7 +245,9 @@ class SidePanelManager {
         let needsTabInfo = Preferences.showTabHierarchyInSidePanel || Preferences.showTabHierarchyInMainPanel || Preferences.groupTabsInSortOrder
         let visibleWindowIds = needsTabInfo ? TabHierarchy.visibleWindowIds(in: Spaces.screenSpacesMap.values.flatMap { $0 }) : Set<CGWindowID>()
         let tabParentMap: [CGWindowID: CGWindowID] = needsTabInfo ? TabHierarchy.queryAXTabGroups(windows, visibleWindowIds: visibleWindowIds) : [:]
-        TabHierarchy.applyParentMap(tabParentMap, to: windows)
+        if needsTabInfo {
+            TabHierarchy.applyParentMap(tabParentMap, to: windows)
+        }
         let groupCreationKeys: [CGWindowID: Int]
         if Preferences.groupTabsInSortOrder {
             groupCreationKeys = TabHierarchy.groupSortKeys(windows, tabParentMap: tabParentMap, keyPath: \.creationOrder)

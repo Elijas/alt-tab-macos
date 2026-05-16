@@ -110,6 +110,7 @@ class TabHierarchy {
         for window in windows {
             guard let axElement = window.axUiElement,
                   let wid = window.cgWindowId,
+                  visibleWindowIds.contains(wid),
                   let childrenAttrs = try? axElement.attributes([kAXChildrenAttribute]),
                   let children = childrenAttrs.children else { continue }
             for child in children {
@@ -153,6 +154,7 @@ class TabHierarchy {
             guard let wid = window.cgWindowId,
                   !alreadyMapped.contains(wid),
                   !parentWids.contains(wid),
+                  visibleWindowIds.contains(wid),
                   window.spaceIds.contains(where: { Spaces.isFullscreenSpace($0) }) else { continue }
             fullscreenParentsByPid[window.application.pid, default: []].append(window)
         }
@@ -192,11 +194,9 @@ class TabHierarchy {
     }
 
     static func visibleWindowIds(in spaceIds: [CGSSpaceID]) -> Set<CGWindowID> {
-        var result = Set<CGWindowID>()
-        for spaceId in Set(spaceIds) {
-            result.formUnion(Spaces.windowsInSpaces([spaceId], false))
-        }
-        return result
+        let spaceIds = Array(Set(spaceIds))
+        guard !spaceIds.isEmpty else { return [] }
+        return Set(Spaces.windowsInSpaces(spaceIds, false))
     }
 
     private static func visibleWindowIds(for windows: [Window]) -> Set<CGWindowID> {
