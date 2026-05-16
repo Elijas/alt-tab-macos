@@ -255,6 +255,7 @@ class SidePanel: NSPanel {
             let x = Self.isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
             let y = screenFrame.midY - panelHeight / 2 + clampedOffset
             setFrameIfNeeded(CGRect(x: x, y: y, width: width, height: panelHeight), display: false)
+            syncHover(at: NSEvent.mouseLocation)
         }
     }
 }

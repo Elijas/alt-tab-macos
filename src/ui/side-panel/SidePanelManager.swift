@@ -23,7 +23,6 @@ class SidePanelManager {
 
     func setup() {
         guard Preferences.sidePanelEnabled else { return }
-        startMouseTracking()
         // force-discover windows on all spaces that AX events may have missed
         Applications.addMissingWindows()
         rebuildPanelsForScreenChange()
@@ -105,7 +104,11 @@ class SidePanelManager {
         }
         panels.removeAll()
 
-        guard Preferences.sidePanelEnabled else { return }
+        guard Preferences.sidePanelEnabled else {
+            stopMouseTracking()
+            return
+        }
+        startMouseTracking()
 
         // create one panel per screen, skipping per-screen disabled screens
         let disabledScreens = Set(Preferences.sidePanelDisabledScreens)
@@ -122,13 +125,16 @@ class SidePanelManager {
     }
 
     private func startMouseTracking() {
-        guard localMouseMonitor == nil && globalMouseMonitor == nil else { return }
-        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            self?.syncHover()
-            return event
+        if localMouseMonitor == nil {
+            localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+                self?.syncHover()
+                return event
+            }
         }
-        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
-            self?.syncHover()
+        if globalMouseMonitor == nil {
+            globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] _ in
+                self?.syncHover()
+            }
         }
     }
 
@@ -144,6 +150,13 @@ class SidePanelManager {
     }
 
     private func syncHover() {
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { [weak self] in
+                self?.syncHover()
+            }
+            return
+        }
+        guard !panels.isEmpty else { return }
         let location = NSEvent.mouseLocation
         for panel in panels.values {
             panel.syncHover(at: location)
