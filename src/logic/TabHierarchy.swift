@@ -11,11 +11,16 @@ class TabHierarchy {
     static var groupCreationKeys = [CGWindowID: Int]()
     // Last computed parent map (child→parent), for access by Windows.updatesBeforeShowing
     static var lastParentMap = [CGWindowID: CGWindowID]()
+    private static var cachedParentMap = [CGWindowID: CGWindowID]()
+    private static var cachedParentMapTimes = [CGWindowID: UInt64]()
+    private static let cachedParentMaxAgeNs: UInt64 = 30_000_000_000
 
     /// Main entry point: compute tab groups and group sort keys for the given window list.
     /// Called from Windows.updatesBeforeShowing() before sort().
     static func computeAndApply(_ windows: [Window]) {
-        let parentMap = queryAXTabGroups(windows)
+        let visibleWindowIds = visibleWindowIds(for: windows)
+        let freshParentMap = queryAXTabGroups(windows, visibleWindowIds: visibleWindowIds)
+        let parentMap = stableParentMap(freshParentMap, windows: windows, visibleWindowIds: visibleWindowIds)
         lastParentMap = parentMap
         if Preferences.groupTabsInSortOrder {
             groupLastFocusKeys = groupSortKeys(windows, tabParentMap: parentMap, keyPath: \.lastFocusOrder)
@@ -24,6 +29,21 @@ class TabHierarchy {
             groupLastFocusKeys.removeAll()
             groupCreationKeys.removeAll()
         }
+    }
+
+    static func stableParentMap(
+        _ parentMap: [CGWindowID: CGWindowID],
+        windows: [Window],
+        visibleWindowIds: Set<CGWindowID>
+    ) -> [CGWindowID: CGWindowID] {
+        var result = parentMap
+        let fallbackParentMap = eventDrivenParentIds(windows, visibleWindowIds: visibleWindowIds)
+        for (childWid, parentWid) in fallbackParentMap where result[childWid] == nil {
+            result[childWid] = parentWid
+        }
+        result = mergeCachedParentMap(result, windows: windows, visibleWindowIds: visibleWindowIds)
+        lastParentMap = result
+        return result
     }
 
     static func applyParentMap(_ parentMap: [CGWindowID: CGWindowID], to windows: [Window]) {
@@ -120,8 +140,9 @@ class TabHierarchy {
                       let tabs = tgChildren.children else { continue }
                 parentWids.insert(wid)
                 for tab in tabs {
-                    guard let tabAttrs = try? tab.attributes([kAXRoleAttribute, kAXTitleAttribute]),
-                          tabAttrs.role == "AXRadioButton",
+                    let keys = [kAXRoleAttribute, kAXSubroleAttribute, kAXTitleAttribute]
+                    guard let tabAttrs = try? tab.attributes(keys),
+                          tabAttrs.role == "AXRadioButton" || tabAttrs.subrole == "AXTabButton",
                           let title = tabAttrs.title, !title.isEmpty else { continue }
                     let key = "\(window.application.pid):\(title)"
                     titleToParents[key, default: []].insert(wid)
@@ -191,6 +212,82 @@ class TabHierarchy {
         }
 
         return result
+    }
+
+    private static func eventDrivenParentIds(
+        _ windows: [Window],
+        visibleWindowIds: Set<CGWindowID>
+    ) -> [CGWindowID: CGWindowID] {
+        var windowByWid = [CGWindowID: Window]()
+        var result = [CGWindowID: CGWindowID]()
+        for window in windows {
+            guard let wid = window.cgWindowId else { continue }
+            windowByWid[wid] = window
+        }
+        for window in windows {
+            guard let childWid = window.cgWindowId,
+                  let siblingWids = window.tabbedSiblingWids,
+                  !visibleWindowIds.contains(childWid) else { continue }
+            let siblings = siblingWids.compactMap { windowByWid[$0] }
+                .filter { $0.application.pid == window.application.pid }
+            let parent = siblings.first { sibling in
+                guard let siblingWid = sibling.cgWindowId else { return false }
+                return siblingWid != childWid && visibleWindowIds.contains(siblingWid) && !sibling.isTabbed
+            } ?? siblings.first { sibling in
+                guard let siblingWid = sibling.cgWindowId else { return false }
+                return siblingWid != childWid && !sibling.isTabbed
+            }
+            if let parentWid = parent?.cgWindowId {
+                result[childWid] = parentWid
+            }
+        }
+        return result
+    }
+
+    private static func mergeCachedParentMap(
+        _ parentMap: [CGWindowID: CGWindowID],
+        windows: [Window],
+        visibleWindowIds: Set<CGWindowID>
+    ) -> [CGWindowID: CGWindowID] {
+        let now = DispatchTime.now().uptimeNanoseconds
+        var windowByWid = [CGWindowID: Window]()
+        for window in windows {
+            guard let wid = window.cgWindowId else { continue }
+            windowByWid[wid] = window
+        }
+        for (childWid, parentWid) in parentMap {
+            cachedParentMap[childWid] = parentWid
+            cachedParentMapTimes[childWid] = now
+        }
+        cachedParentMap = cachedParentMap.filter { entry in
+            let childWid = entry.key
+            let parentWid = entry.value
+            guard let childWindow = windowByWid[childWid],
+                  let parentWindow = windowByWid[parentWid],
+                  let cachedAt = cachedParentMapTimes[childWid],
+                  now >= cachedAt,
+                  now - cachedAt <= cachedParentMaxAgeNs else { return false }
+            return canReuseCachedParent(childWindow, parentWindow, childWid, parentWid, visibleWindowIds)
+        }
+        cachedParentMapTimes = cachedParentMapTimes.filter { entry in cachedParentMap[entry.key] != nil }
+        var result = parentMap
+        for (childWid, parentWid) in cachedParentMap where result[childWid] == nil {
+            result[childWid] = parentWid
+        }
+        return result
+    }
+
+    private static func canReuseCachedParent(
+        _ childWindow: Window,
+        _ parentWindow: Window,
+        _ childWid: CGWindowID,
+        _ parentWid: CGWindowID,
+        _ visibleWindowIds: Set<CGWindowID>
+    ) -> Bool {
+        guard childWindow.application.pid == parentWindow.application.pid,
+              childWid != parentWid,
+              !visibleWindowIds.contains(childWid) else { return false }
+        return true
     }
 
     static func visibleWindowIds(in spaceIds: [CGSSpaceID]) -> Set<CGWindowID> {

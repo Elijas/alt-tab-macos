@@ -243,8 +243,24 @@ class SidePanelManager {
 
         // Compute tab parent map when any tab-aware feature needs it (AX IPC is expensive)
         let needsTabInfo = Preferences.showTabHierarchyInSidePanel || Preferences.showTabHierarchyInMainPanel || Preferences.groupTabsInSortOrder
-        let visibleWindowIds = needsTabInfo ? TabHierarchy.visibleWindowIds(in: Spaces.screenSpacesMap.values.flatMap { $0 }) : Set<CGWindowID>()
-        let tabParentMap: [CGWindowID: CGWindowID] = needsTabInfo ? TabHierarchy.queryAXTabGroups(windows, visibleWindowIds: visibleWindowIds) : [:]
+        let allSpaceIds = Spaces.screenSpacesMap.values.flatMap { $0 }
+        let visibleWindowIds: Set<CGWindowID>
+        let tabParentMap: [CGWindowID: CGWindowID]
+        if needsTabInfo {
+            visibleWindowIds = TabHierarchy.visibleWindowIds(in: allSpaceIds)
+            let freshTabParentMap = TabHierarchy.queryAXTabGroups(
+                windows,
+                visibleWindowIds: visibleWindowIds
+            )
+            tabParentMap = TabHierarchy.stableParentMap(
+                freshTabParentMap,
+                windows: windows,
+                visibleWindowIds: visibleWindowIds
+            )
+        } else {
+            visibleWindowIds = []
+            tabParentMap = [:]
+        }
         if needsTabInfo {
             TabHierarchy.applyParentMap(tabParentMap, to: windows)
         }

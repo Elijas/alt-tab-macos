@@ -84,7 +84,13 @@ class SidePanelRow: NSView {
         self.isIndented = isIndented
         applyIndent()
         updateBackground()
-        onClick = { [weak window] in window?.focus() }
+        onClick = { [weak window] in
+            guard let window else { return }
+            window.focus()
+            if Windows.updateLastFocusOrder(window) != nil {
+                SidePanelManager.shared.refreshPanels()
+            }
+        }
         onMiddleClick = { [weak window] in window?.close() }
     }
 

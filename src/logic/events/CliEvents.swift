@@ -59,7 +59,17 @@ class CliServer {
                 window.updateSpacesAndScreen()
             }
             // compute tab parent relationships via AX tab groups
-            let parentMap = TabHierarchy.queryAXTabGroups(Windows.list)
+            let allSpaceIds = Spaces.screenSpacesMap.values.flatMap { $0 }
+            let visibleWindowIds = TabHierarchy.visibleWindowIds(in: allSpaceIds)
+            let freshParentMap = TabHierarchy.queryAXTabGroups(
+                Windows.list,
+                visibleWindowIds: visibleWindowIds
+            )
+            let parentMap = TabHierarchy.stableParentMap(
+                freshParentMap,
+                windows: Windows.list,
+                visibleWindowIds: visibleWindowIds
+            )
             TabHierarchy.applyParentMap(parentMap, to: Windows.list)
             let windows = Windows.list
                 .filter { !$0.isWindowlessApp }
