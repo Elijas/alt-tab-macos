@@ -2,7 +2,6 @@ import Cocoa
 
 class SidePanelManager {
     static let shared = SidePanelManager()
-    private static let mainAltTabBundleId = "com.lwouis.alt-tab-macos"
 
     private var panels = [ScreenUuid: SidePanel]()
     private let panelWindowNumbersLock = NSLock()
@@ -512,36 +511,13 @@ class SidePanelManager {
 
     private func exceptions() -> [ExceptionEntry] {
         if let resolved = resolvedExceptions { return resolved }
-        // read from main AltTab's preferences domain (sidepanel has its own bundle id)
-        var entries = Preferences.exceptions
-        if let mainDefaults = UserDefaults(suiteName: Self.mainAltTabBundleId),
-           let json = mainDefaults.string(forKey: "exceptions"),
-           let data = json.data(using: .utf8),
-           let mainEntries = try? JSONDecoder().decode([ExceptionEntry].self, from: data) {
-            // merge: main AltTab entries take precedence, add any not already present
-            let existingIds = Set(entries.map { $0.bundleIdentifier })
-            for entry in mainEntries where !existingIds.contains(entry.bundleIdentifier) {
-                entries.append(entry)
-            }
-        }
+        let entries = ExceptionFilter.resolvedEntries()
         resolvedExceptions = entries
         return entries
     }
 
     private func isExcluded(_ window: Window) -> Bool {
-        guard let bundleId = window.application.bundleIdentifier else { return false }
-        return exceptions().contains { entry in
-            guard entry.hide != .none else { return false }
-            guard bundleId.hasPrefix(entry.bundleIdentifier) else { return false }
-            switch entry.hide {
-            case .none: return false
-            case .always: return true
-            case .whenNoOpenWindow: return window.isWindowlessApp
-            case .windowTitleContains:
-                guard let titleFilter = entry.windowTitleContains, !titleFilter.isEmpty else { return false }
-                return window.title.contains(titleFilter)
-            }
-        }
+        return ExceptionFilter.isExcluded(window, from: exceptions())
     }
 
     /// Window numbers for overlay panels only (SidePanels).

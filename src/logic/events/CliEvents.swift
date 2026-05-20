@@ -235,11 +235,7 @@ class CliServer {
         guard let mouseScreenId = NSScreen.withMouse()?.cachedUuid() else { return }
         let visibleSpaceIds = Set(Spaces.visibleSpaces)
 
-        // Exceptions: user-configured hide entries + all AltTab builds
-        let exceptionPrefixes = Preferences.exceptions
-            .filter { $0.hide != .none }
-            .map { $0.bundleIdentifier }
-        let altTabPrefix = "com.lwouis.alt-tab-macos.at"
+        let exceptions = ExceptionFilter.resolvedEntries(includeAltTabBuilds: true)
 
         let candidates = tabGroupRepresentatives(Windows.list.filter { window in
             guard !window.isWindowlessApp else { return false }
@@ -251,13 +247,7 @@ class CliServer {
             guard window.spaceIds.contains(where: { visibleSpaceIds.contains($0) }) else { return false }
             guard !window.isMinimized else { return false }
             guard !window.isHidden else { return false }
-            // Not excluded
-            if let bundleId = window.application.bundleIdentifier {
-                if bundleId.hasPrefix(altTabPrefix) { return false }
-                for prefix in exceptionPrefixes {
-                    if bundleId.hasPrefix(prefix) { return false }
-                }
-            }
+            guard !ExceptionFilter.isExcluded(window, from: exceptions) else { return false }
             return true
         })
         .sorted { $0.creationOrder > $1.creationOrder }
