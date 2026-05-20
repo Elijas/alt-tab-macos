@@ -74,20 +74,17 @@ class TabHierarchy {
     /// Old heuristic tab detection using CGS visible-window lists.
     /// Kept for --debug-tabs diagnostic (comparing heuristic vs event-driven TabGroup).
     /// NOT used in the main UI path — upstream's event-driven TabGroup.updateState() is better.
-    static func detectTabbedWindows(_ window: Window, _ cgsWindowIds: [CGWindowID], _ visibleCgsWindowIds: [CGWindowID]) {
-        if let cgWindowId = window.cgWindowId {
-            if window.isMinimized || window.isHidden {
-                if #available(macOS 13.0, *) {
-                    // not exact after window merging
-                    window.isTabbed = !cgsWindowIds.contains(cgWindowId)
-                } else {
-                    // not known
-                    window.isTabbed = false
-                }
-            } else {
-                window.isTabbed = !visibleCgsWindowIds.contains(cgWindowId)
+    static func heuristicIsTabbed(_ window: Window, _ cgsWindowIds: [CGWindowID], _ visibleCgsWindowIds: [CGWindowID]) -> Bool {
+        guard let cgWindowId = window.cgWindowId else { return false }
+        if window.isMinimized || window.isHidden {
+            if #available(macOS 13.0, *) {
+                // not exact after window merging
+                return !cgsWindowIds.contains(cgWindowId)
             }
+            // not known
+            return false
         }
+        return !visibleCgsWindowIds.contains(cgWindowId)
     }
 
     /// Infers tab parent-child relationships from the isTabbed flag.
@@ -118,7 +115,7 @@ class TabHierarchy {
     /// Query AX tab groups on visible windows to build child→parent mapping.
     /// Walks each visible window's AXChildren for AXTabGroup, reads tab titles,
     /// then matches any window by (PID, title). Does NOT depend on isTabbed flag
-    /// since that requires detectTabbedWindows which the side panel path doesn't call.
+    /// since that requires the CGS heuristic which the side panel path doesn't call.
     /// On title collision across tab groups, skip the ambiguous title rather than assigning it to the wrong parent.
     static func queryAXTabGroups(_ windows: [Window], visibleWindowIds providedVisibleWindowIds: Set<CGWindowID>? = nil) -> [CGWindowID: CGWindowID] {
         var result = [CGWindowID: CGWindowID]()

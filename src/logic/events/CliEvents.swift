@@ -367,14 +367,16 @@ class CliServer {
     // MARK: - debug-tabs
 
     private static func debugTabs() -> Codable {
-        // Refresh space/screen and detect tabbed state via heuristic (for diagnostic comparison)
+        // Refresh space/screen and compute tabbed state via heuristic (for diagnostic comparison)
         Spaces.refresh()
         let spaceIdsAndIndexes = Spaces.idsAndIndexes.map { $0.0 }
         let cgsWindowIds = Spaces.windowsInSpaces(spaceIdsAndIndexes)
         let visibleCgsWindowIds = Spaces.windowsInSpaces(spaceIdsAndIndexes, false)
+        var heuristicIsTabbedByWid = [CGWindowID: Bool]()
         for window in Windows.list {
             window.updateSpacesAndScreen()
-            TabHierarchy.detectTabbedWindows(window, cgsWindowIds, visibleCgsWindowIds)
+            guard let wid = window.cgWindowId else { continue }
+            heuristicIsTabbedByWid[wid] = TabHierarchy.heuristicIsTabbed(window, cgsWindowIds, visibleCgsWindowIds)
         }
 
         var entries = [DebugTabEntry]()
@@ -382,6 +384,7 @@ class CliServer {
         for window in Windows.list {
             guard let wid = window.cgWindowId else { continue }
             let axElement = window.axUiElement
+            let heuristicIsTabbed = heuristicIsTabbedByWid[wid] ?? TabHierarchy.heuristicIsTabbed(window, cgsWindowIds, visibleCgsWindowIds)
 
             // Compute fullscreen: true if ANY of the window's spaces is a fullscreen space
             let isFullscreen = window.spaceIds.contains(where: { Spaces.isFullscreenSpace($0) })
@@ -393,7 +396,7 @@ class CliServer {
                 title: window.title,
                 appName: window.application.localizedName,
                 pid: window.application.pid,
-                isTabbed: window.isTabbed,
+                isTabbed: heuristicIsTabbed,
                 isFullscreen: isFullscreen,
                 spaceIds: spaceIds.isEmpty ? nil : spaceIds,
                 hasAxElement: axElement != nil
@@ -407,7 +410,7 @@ class CliServer {
             }
 
             if let axElement = axElement {
-                if !window.isTabbed {
+                if !heuristicIsTabbed {
                     // --- VISIBLE window: walk children looking for AXTabGroup ---
                     entry = debugVisibleWindow(axElement, entry)
                 } else {
