@@ -118,8 +118,8 @@ class SidePanelRow: NSView {
 
     func setIconsOnly(_ iconsOnly: Bool) {
         if iconsOnly {
-            let n = Preferences.sidePanelCompactLetters
-            if isIndented || isEmpty || n == 0 {
+            let n = isIndented ? Preferences.sidePanelCompactLettersIndented : Preferences.sidePanelCompactLetters
+            if isEmpty || n == 0 {
                 titleLabel.isHidden = true
             } else {
                 titleLabel.stringValue = fullTitle.count > n ? String(fullTitle.prefix(n)) + "…" : fullTitle
