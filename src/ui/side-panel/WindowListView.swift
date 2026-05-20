@@ -230,6 +230,28 @@ class WindowListView: NSView {
         contentStackView.frame = CGRect(x: 0, y: 0, width: width, height: contentHeight)
     }
 
+    func syncHover(at screenLocation: NSPoint?) {
+        guard let screenLocation, let window else {
+            for row in rowPool { row.unhover() }
+            return
+        }
+        let windowLocation = window.convertPoint(fromScreen: screenLocation)
+        let location = contentStackView.convert(windowLocation, from: nil)
+        let hoveredRowIndex = firstVisibleRowIndex(containing: location)
+        for (i, row) in rowPool.enumerated() {
+            row.syncHover(isMouseInside: i == hoveredRowIndex)
+        }
+    }
+
+    private func firstVisibleRowIndex(containing location: NSPoint) -> Int? {
+        for case .row(let i) in layoutOrder {
+            let row = rowPool[i]
+            guard !row.isHidden, row.frame.contains(location) else { continue }
+            return i
+        }
+        return nil
+    }
+
     /// Lays out rows+separators+headers for the given groups. Returns content height.
     func updateContents(_ groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int? = nil, spaceIndexes: [SpaceIndex] = [], spaceIds: [CGSSpaceID] = []) -> CGFloat {
         let _perfStart = DispatchTime.now()

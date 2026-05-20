@@ -177,6 +177,12 @@ class SidePanelRow: NSView {
         updateBackground()
     }
 
+    func syncHover(isMouseInside: Bool) {
+        guard isHovered != isMouseInside else { return }
+        isHovered = isMouseInside
+        updateBackground()
+    }
+
     override func mouseEntered(with event: NSEvent) {
         // Clear hover on sibling rows — NSTrackingArea doesn't reliably fire
         // mouseExited during scroll, so multiple rows can get stuck highlighted.
