@@ -241,7 +241,7 @@ class CliServer {
             .map { $0.bundleIdentifier }
         let altTabPrefix = "com.lwouis.alt-tab-macos.at"
 
-        let candidates = Windows.list.filter { window in
+        let candidates = tabGroupRepresentatives(Windows.list.filter { window in
             guard !window.isWindowlessApp else { return false }
             // Same screen, or focused window with stale nil screenId
             let sameScreen = (window.screenId as String?) == (mouseScreenId as String)
@@ -259,8 +259,8 @@ class CliServer {
                 }
             }
             return true
-        }
-        .sorted { $0.creationOrder < $1.creationOrder }
+        })
+        .sorted { $0.creationOrder > $1.creationOrder }
 
         let len = candidates.count
         guard len >= 2 else { return }
@@ -276,6 +276,44 @@ class CliServer {
 
         target.focus()
         _ = Windows.updateLastFocusOrder(target)
+        SidePanelManager.shared.refreshPanels()
+    }
+
+    private static func tabGroupRepresentatives(_ windows: [Window]) -> [Window] {
+        var groups = [CGWindowID: Window]()
+        for window in windows {
+            guard let key = tabGroupKey(window) else { continue }
+            guard let current = groups[key] else {
+                groups[key] = window
+                continue
+            }
+            groups[key] = tabGroupRepresentative(current, window)
+        }
+        return Array(groups.values)
+    }
+
+    private static func tabGroupKey(_ window: Window) -> CGWindowID? {
+        if let siblingWids = window.tabbedSiblingWids, !siblingWids.isEmpty {
+            var groupWids = Set(siblingWids)
+            if let wid = window.cgWindowId {
+                groupWids.insert(wid)
+            }
+            return groupWids.min()
+        }
+        if window.parentWindowId != 0 {
+            return window.parentWindowId
+        }
+        return window.cgWindowId
+    }
+
+    private static func tabGroupRepresentative(_ lhs: Window, _ rhs: Window) -> Window {
+        if lhs.isTabbed != rhs.isTabbed {
+            return lhs.isTabbed ? rhs : lhs
+        }
+        if lhs.lastFocusOrder != rhs.lastFocusOrder {
+            return lhs.lastFocusOrder < rhs.lastFocusOrder ? lhs : rhs
+        }
+        return lhs.cgWindowId! < rhs.cgWindowId! ? lhs : rhs
     }
 
     private struct JsonWindowList: Codable {
