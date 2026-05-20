@@ -469,3 +469,48 @@ struct ExceptionEntry: Codable {
     var ignore: ExceptionIgnorePreference
     var windowTitleContains: String?
 }
+
+enum ExceptionFilter {
+    private static let mainAltTabBundleId = "com.lwouis.alt-tab-macos"
+    private static let altTabBuildBundlePrefix = "com.lwouis.alt-tab-macos.at"
+
+    static func resolvedEntries(includeAltTabBuilds: Bool = false) -> [ExceptionEntry] {
+        var entries = Preferences.exceptions
+        addMainAltTabEntries(&entries)
+        if includeAltTabBuilds { entries.append(altTabBuildEntry()) }
+        return entries
+    }
+
+    static func isExcluded(_ window: Window, from entries: [ExceptionEntry]) -> Bool {
+        guard let bundleId = window.application.bundleIdentifier else { return false }
+        return entries.contains { isExcluded(window, bundleId, $0) }
+    }
+
+    private static func addMainAltTabEntries(_ entries: inout [ExceptionEntry]) {
+        guard let mainDefaults = UserDefaults(suiteName: mainAltTabBundleId),
+              let json = mainDefaults.string(forKey: "exceptions"),
+              let data = json.data(using: .utf8),
+              let mainEntries = try? JSONDecoder().decode([ExceptionEntry].self, from: data) else { return }
+        let existingIds = Set(entries.map { $0.bundleIdentifier })
+        for entry in mainEntries where !existingIds.contains(entry.bundleIdentifier) {
+            entries.append(entry)
+        }
+    }
+
+    private static func altTabBuildEntry() -> ExceptionEntry {
+        return ExceptionEntry(bundleIdentifier: altTabBuildBundlePrefix, hide: .always, ignore: .none, windowTitleContains: nil)
+    }
+
+    private static func isExcluded(_ window: Window, _ bundleId: String, _ entry: ExceptionEntry) -> Bool {
+        guard entry.hide != .none else { return false }
+        guard bundleId.hasPrefix(entry.bundleIdentifier) else { return false }
+        switch entry.hide {
+        case .none: return false
+        case .always: return true
+        case .whenNoOpenWindow: return window.isWindowlessApp
+        case .windowTitleContains:
+            guard let titleFilter = entry.windowTitleContains, !titleFilter.isEmpty else { return false }
+            return window.title.contains(titleFilter)
+        }
+    }
+}
