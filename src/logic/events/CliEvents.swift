@@ -150,7 +150,7 @@ class CliServer {
             return debugTabs()
         }
         if rawValue == "--panel-contents" {
-            return PanelContentsResponse(screens: SidePanelManager.shared.snapshotPanelContents())
+            return PanelContentsResponse(screens: SidePanelManager.shared.snapshotSidePanelContents())
         }
         if rawValue.hasPrefix("--focus="),
            let id = CGWindowID(rawValue.dropFirst("--focus=".count)), let window = (Windows.list.first { $0.cgWindowId == id }) {
