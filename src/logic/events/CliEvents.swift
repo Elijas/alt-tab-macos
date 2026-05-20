@@ -272,7 +272,7 @@ class CliServer {
     private static func tabGroupRepresentatives(_ windows: [Window]) -> [Window] {
         var groups = [CGWindowID: Window]()
         for window in windows {
-            guard let key = tabGroupKey(window) else { continue }
+            guard let key = window.tabGroupKey else { continue }
             guard let current = groups[key] else {
                 groups[key] = window
                 continue
@@ -280,20 +280,6 @@ class CliServer {
             groups[key] = tabGroupRepresentative(current, window)
         }
         return Array(groups.values)
-    }
-
-    private static func tabGroupKey(_ window: Window) -> CGWindowID? {
-        if let siblingWids = window.tabbedSiblingWids, !siblingWids.isEmpty {
-            var groupWids = Set(siblingWids)
-            if let wid = window.cgWindowId {
-                groupWids.insert(wid)
-            }
-            return groupWids.min()
-        }
-        if window.parentWindowId != 0 {
-            return window.parentWindowId
-        }
-        return window.cgWindowId
     }
 
     private static func tabGroupRepresentative(_ lhs: Window, _ rhs: Window) -> Window {
