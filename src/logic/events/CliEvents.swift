@@ -84,6 +84,7 @@ class CliServer {
                         creationOrder: $0.creationOrder,
                         isTabbed: $0.isTabbed,
                         parentWindowId: $0.parentWindowId == 0 ? nil : $0.parentWindowId,
+                        tabGroupKey: $0.tabGroupKey,
                         isHidden: $0.isHidden,
                         isFullscreen: $0.isFullscreen,
                         isMinimized: $0.isMinimized,
@@ -329,6 +330,7 @@ class CliServer {
         var creationOrder: Int
         var isTabbed: Bool
         var parentWindowId: CGWindowID?
+        var tabGroupKey: CGWindowID?
         var isHidden: Bool
         var isFullscreen: Bool
         var isMinimized: Bool
