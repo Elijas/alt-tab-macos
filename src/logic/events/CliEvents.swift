@@ -260,7 +260,7 @@ class CliServer {
             }
             return true
         })
-        .sorted { $0.creationOrder < $1.creationOrder }
+        .sorted { $0.creationOrder > $1.creationOrder }
 
         let len = candidates.count
         guard len >= 2 else { return }
