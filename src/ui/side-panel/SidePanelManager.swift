@@ -46,6 +46,7 @@ class SidePanelManager {
         discoveryTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
             Applications.removeZombieWindows()
             self?.discoverMissingWindows()
+            Applications.reviewExistingWindows()
             self?.refreshPanels()
         }
     }
