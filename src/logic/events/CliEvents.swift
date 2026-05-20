@@ -303,7 +303,7 @@ class CliServer {
         if lhs.lastFocusOrder != rhs.lastFocusOrder {
             return lhs.lastFocusOrder < rhs.lastFocusOrder ? lhs : rhs
         }
-        return lhs.cgWindowId! < rhs.cgWindowId! ? lhs : rhs
+        return (lhs.cgWindowId ?? 0) < (rhs.cgWindowId ?? 0) ? lhs : rhs
     }
 
     private struct JsonWindowList: Codable {
