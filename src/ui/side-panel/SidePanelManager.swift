@@ -5,6 +5,8 @@ class SidePanelManager {
     private static let mainAltTabBundleId = "com.lwouis.alt-tab-macos"
 
     private var panels = [ScreenUuid: SidePanel]()
+    private let panelWindowNumbersLock = NSLock()
+    private var panelWindowNumbersSnapshot = Set<Int>()
     private var mainPanel: MainPanel?
     private var lastRefreshTimeInNanoseconds = DispatchTime.now().uptimeNanoseconds
     private var lastSpaceChangeNanos: UInt64 = 0
@@ -80,6 +82,7 @@ class SidePanelManager {
             panel.orderOut(nil)
         }
         panels.removeAll()
+        rebuildPanelWindowNumbersSnapshot()
     }
 
     func disableScreen(_ uuid: ScreenUuid) {
@@ -89,6 +92,7 @@ class SidePanelManager {
         Preferences.set("sidePanelDisabledScreens", Preferences.jsonEncode(disabled))
         panels[uuid]?.orderOut(nil)
         panels.removeValue(forKey: uuid)
+        rebuildPanelWindowNumbersSnapshot()
     }
 
     func enableScreen(_ uuid: ScreenUuid) {
@@ -107,6 +111,7 @@ class SidePanelManager {
 
         guard Preferences.sidePanelEnabled else {
             stopMouseTracking()
+            rebuildPanelWindowNumbersSnapshot()
             return
         }
         startMouseTracking()
@@ -120,9 +125,16 @@ class SidePanelManager {
             panels[uuid] = panel
             panel.orderFront(nil)
         }
+        rebuildPanelWindowNumbersSnapshot()
 
         // populate immediately
         refreshPanelsNow()
+    }
+
+    private func rebuildPanelWindowNumbersSnapshot() {
+        panelWindowNumbersLock.lock()
+        defer { panelWindowNumbersLock.unlock() }
+        panelWindowNumbersSnapshot = Set(panels.values.map { $0.windowNumber })
     }
 
     private func startMouseTracking() {
@@ -535,7 +547,9 @@ class SidePanelManager {
     /// Window numbers for overlay panels only (SidePanels).
     /// MainPanel is a full-citizen window and participates in Windows.list.
     func allWindowNumbers() -> Set<Int> {
-        Set(panels.values.map { $0.windowNumber })
+        panelWindowNumbersLock.lock()
+        defer { panelWindowNumbersLock.unlock() }
+        return panelWindowNumbersSnapshot
     }
 
     // MARK: - CGWindowList Audit
