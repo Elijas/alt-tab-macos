@@ -276,6 +276,7 @@ class CliServer {
 
         target.focus()
         _ = Windows.updateLastFocusOrder(target)
+        SidePanelManager.shared.refreshPanels()
     }
 
     private static func tabGroupRepresentatives(_ windows: [Window]) -> [Window] {
