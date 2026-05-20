@@ -34,6 +34,17 @@ class Window {
     var tabbedSiblingWids: [CGWindowID]?
     var parentWindowId: CGWindowID = 0  // 0 = standalone, non-zero = tab child of this parent
     var isTabChild: Bool { parentWindowId != 0 }
+    /// Canonical tab-group identity for dedupe, grouping, and group-aware sorting.
+    /// Precedence: non-empty tabbedSiblingWids (min of set plus self) -> parentWindowId -> cgWindowId.
+    var tabGroupKey: CGWindowID? {
+        if let siblingWids = tabbedSiblingWids, !siblingWids.isEmpty {
+            var groupWids = Set(siblingWids)
+            if let wid = cgWindowId { groupWids.insert(wid) }
+            return groupWids.min()
+        }
+        if parentWindowId != 0 { return parentWindowId }
+        return cgWindowId
+    }
     var isHidden: Bool { get { application.isHidden } }
     var dockLabel: String? { get { application.dockLabel } }
     var isFullscreen = false
