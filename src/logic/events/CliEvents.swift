@@ -84,6 +84,7 @@ class CliServer {
                         creationOrder: $0.creationOrder,
                         isTabbed: $0.isTabbed,
                         parentWindowId: $0.parentWindowId == 0 ? nil : $0.parentWindowId,
+                        tabGroupKey: $0.tabGroupKey,
                         isHidden: $0.isHidden,
                         isFullscreen: $0.isFullscreen,
                         isMinimized: $0.isMinimized,
@@ -272,7 +273,7 @@ class CliServer {
     private static func tabGroupRepresentatives(_ windows: [Window]) -> [Window] {
         var groups = [CGWindowID: Window]()
         for window in windows {
-            guard let key = tabGroupKey(window) else { continue }
+            guard let key = window.tabGroupKey else { continue }
             guard let current = groups[key] else {
                 groups[key] = window
                 continue
@@ -282,20 +283,6 @@ class CliServer {
         return Array(groups.values)
     }
 
-    private static func tabGroupKey(_ window: Window) -> CGWindowID? {
-        if let siblingWids = window.tabbedSiblingWids, !siblingWids.isEmpty {
-            var groupWids = Set(siblingWids)
-            if let wid = window.cgWindowId {
-                groupWids.insert(wid)
-            }
-            return groupWids.min()
-        }
-        if window.parentWindowId != 0 {
-            return window.parentWindowId
-        }
-        return window.cgWindowId
-    }
-
     private static func tabGroupRepresentative(_ lhs: Window, _ rhs: Window) -> Window {
         if lhs.isTabbed != rhs.isTabbed {
             return lhs.isTabbed ? rhs : lhs
@@ -303,7 +290,7 @@ class CliServer {
         if lhs.lastFocusOrder != rhs.lastFocusOrder {
             return lhs.lastFocusOrder < rhs.lastFocusOrder ? lhs : rhs
         }
-        return lhs.cgWindowId! < rhs.cgWindowId! ? lhs : rhs
+        return (lhs.cgWindowId ?? 0) < (rhs.cgWindowId ?? 0) ? lhs : rhs
     }
 
     private struct JsonWindowList: Codable {
@@ -343,6 +330,7 @@ class CliServer {
         var creationOrder: Int
         var isTabbed: Bool
         var parentWindowId: CGWindowID?
+        var tabGroupKey: CGWindowID?
         var isHidden: Bool
         var isFullscreen: Bool
         var isMinimized: Bool

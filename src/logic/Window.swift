@@ -13,7 +13,7 @@ class Window {
     private struct FocusSnapshot {
         let pid: pid_t
         let targetCgWindowId: CGWindowID
-        let targetAxElement: AXUIElement?
+        let targetAxElement: AXUIElement
         let tab: TabFocusSnapshot?
     }
     private struct TabFocusSnapshot {
@@ -34,6 +34,17 @@ class Window {
     var tabbedSiblingWids: [CGWindowID]?
     var parentWindowId: CGWindowID = 0  // 0 = standalone, non-zero = tab child of this parent
     var isTabChild: Bool { parentWindowId != 0 }
+    /// Canonical tab-group identity for dedupe, grouping, and group-aware sorting.
+    /// Precedence: non-empty tabbedSiblingWids (min of set plus self) -> parentWindowId -> cgWindowId.
+    var tabGroupKey: CGWindowID? {
+        if let siblingWids = tabbedSiblingWids, !siblingWids.isEmpty {
+            var groupWids = Set(siblingWids)
+            if let wid = cgWindowId { groupWids.insert(wid) }
+            return groupWids.min()
+        }
+        if parentWindowId != 0 { return parentWindowId }
+        return cgWindowId
+    }
     var isHidden: Bool { get { application.isHidden } }
     var dockLabel: String? { get { application.dockLabel } }
     var isFullscreen = false
@@ -244,7 +255,7 @@ class Window {
                 } else {
                     _SLPSSetFrontProcessWithOptions(&psn, snapshot.targetCgWindowId, SLPSMode.userGenerated.rawValue)
                     Window.makeKeyWindow(snapshot.targetCgWindowId, &psn)
-                    try? snapshot.targetAxElement!.focusWindow()
+                    try? snapshot.targetAxElement.focusWindow()
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(50)) {
                     Windows.previewSelectedWindowIfNeeded()
@@ -254,8 +265,8 @@ class Window {
     }
 
     private func focusSnapshot() -> FocusSnapshot? {
-        guard let targetCgWindowId = cgWindowId else { return nil }
-        return FocusSnapshot(pid: application.pid, targetCgWindowId: targetCgWindowId, targetAxElement: axUiElement, tab: tabFocusSnapshot())
+        guard let targetCgWindowId = cgWindowId, let targetAxElement = axUiElement else { return nil }
+        return FocusSnapshot(pid: application.pid, targetCgWindowId: targetCgWindowId, targetAxElement: targetAxElement, tab: tabFocusSnapshot())
     }
 
     private func tabFocusSnapshot() -> TabFocusSnapshot? {
@@ -279,7 +290,7 @@ class Window {
         }
         makeKeyWindow(snapshot.targetCgWindowId, &psn)
         BackgroundWork.accessibilityCommandsQueue.addOperation {
-            try? snapshot.targetAxElement?.focusWindow()
+            try? snapshot.targetAxElement.focusWindow()
         }
     }
 

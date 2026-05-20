@@ -102,7 +102,6 @@ class Windows {
         refreshWhichWindowsToShowTheUser()
         // Fork: compute tab groups and group sort keys for tab-aware sorting
         TabHierarchy.computeAndApply(list)
-        TabHierarchy.applyParentMap(TabHierarchy.lastParentMap, to: list)
         sort()
         // Fork: reorder for tab hierarchy display in main panel
         if Preferences.showTabHierarchyInMainPanel {
