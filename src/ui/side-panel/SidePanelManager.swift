@@ -278,7 +278,7 @@ class SidePanelManager {
         }
         let groupCreationKeys: [CGWindowID: Int]
         if Preferences.groupTabsInSortOrder {
-            groupCreationKeys = TabHierarchy.groupSortKeys(windows, tabParentMap: tabParentMap, keyPath: \.creationOrder)
+            groupCreationKeys = TabHierarchy.groupSortKeys(windows, keyPath: \.creationOrder)
         } else {
             groupCreationKeys = [:]
         }

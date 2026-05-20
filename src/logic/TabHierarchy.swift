@@ -22,9 +22,10 @@ class TabHierarchy {
         let freshParentMap = queryAXTabGroups(windows, visibleWindowIds: visibleWindowIds)
         let parentMap = stableParentMap(freshParentMap, windows: windows, visibleWindowIds: visibleWindowIds)
         lastParentMap = parentMap
+        applyParentMap(parentMap, to: windows)
         if Preferences.groupTabsInSortOrder {
-            groupLastFocusKeys = groupSortKeys(windows, tabParentMap: parentMap, keyPath: \.lastFocusOrder)
-            groupCreationKeys = groupSortKeys(windows, tabParentMap: parentMap, keyPath: \.creationOrder)
+            groupLastFocusKeys = groupSortKeys(windows, keyPath: \.lastFocusOrder)
+            groupCreationKeys = groupSortKeys(windows, keyPath: \.creationOrder)
         } else {
             groupLastFocusKeys.removeAll()
             groupCreationKeys.removeAll()
@@ -305,38 +306,21 @@ class TabHierarchy {
     /// Compute group-aware sort keys for tab groups.
     /// Windows in a tab group all get min(keyPath) across group members.
     /// Windows not in any group keep their own value.
-    static func groupSortKeys(_ windows: [Window], tabParentMap: [CGWindowID: CGWindowID], keyPath: KeyPath<Window, Int>) -> [CGWindowID: Int] {
-        var windowByWid = [CGWindowID: Window]()
-        for window in windows {
-            guard let wid = window.cgWindowId else { continue }
-            windowByWid[wid] = window
-        }
-        var childrenByParent = [CGWindowID: [Window]]()
-        for (childWid, parentWid) in tabParentMap {
-            if let childWindow = windowByWid[childWid] {
-                childrenByParent[parentWid, default: []].append(childWindow)
-            }
-        }
+    static func groupSortKeys(_ windows: [Window], keyPath: KeyPath<Window, Int>) -> [CGWindowID: Int] {
+        var windowsByGroup = [CGWindowID: [Window]]()
         var result = [CGWindowID: Int]()
-        for (parentWid, children) in childrenByParent {
-            var groupValues = children.map { $0[keyPath: keyPath] }
-            if let parentWindow = windowByWid[parentWid] {
-                groupValues.append(parentWindow[keyPath: keyPath])
-            }
-            guard let minVal = groupValues.min() else { continue }
-            if windowByWid[parentWid] != nil {
-                result[parentWid] = minVal
-            }
-            for child in children {
-                if let wid = child.cgWindowId {
-                    result[wid] = minVal
-                }
-            }
-        }
         for window in windows {
             guard let wid = window.cgWindowId else { continue }
-            if result[wid] == nil {
+            guard let groupKey = window.tabGroupKey else {
                 result[wid] = window[keyPath: keyPath]
+                continue
+            }
+            windowsByGroup[groupKey, default: []].append(window)
+        }
+        for (_, group) in windowsByGroup {
+            guard let minVal = group.map({ $0[keyPath: keyPath] }).min() else { continue }
+            for window in group {
+                if let wid = window.cgWindowId { result[wid] = minVal }
             }
         }
         return result
