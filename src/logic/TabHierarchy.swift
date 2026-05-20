@@ -228,9 +228,18 @@ class TabHierarchy {
                   !visibleWindowIds.contains(childWid) else { continue }
             let siblings = siblingWids.compactMap { windowByWid[$0] }
                 .filter { $0.application.pid == window.application.pid }
+            let focusedWindow = window.application.focusedWindow
             let parent = siblings.first { sibling in
+                guard let focusedWindow,
+                      sibling === focusedWindow,
+                      let siblingWid = sibling.cgWindowId else { return false }
+                return siblingWid != childWid && visibleWindowIds.contains(siblingWid)
+            } ?? siblings.first { sibling in
                 guard let siblingWid = sibling.cgWindowId else { return false }
                 return siblingWid != childWid && visibleWindowIds.contains(siblingWid) && !sibling.isTabbed
+            } ?? siblings.first { sibling in
+                guard let siblingWid = sibling.cgWindowId else { return false }
+                return siblingWid != childWid && visibleWindowIds.contains(siblingWid)
             } ?? siblings.first { sibling in
                 guard let siblingWid = sibling.cgWindowId else { return false }
                 return siblingWid != childWid && !sibling.isTabbed
