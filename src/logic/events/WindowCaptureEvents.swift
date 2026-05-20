@@ -1,31 +1,70 @@
 import Cocoa
 import ScreenCaptureKit
 
+fileprivate struct ScreenshotWindowSnapshot {
+    let cgWindowId: CGWindowID
+    let size: CGSize
+    let scaleFactor: CGFloat
+    let debugId: String
+    let previewSelectedWindow: Bool
+    let maxThumbnailSize: NSSize
+}
+
 @available(macOS 14.0, *)
 class WindowCaptureScreenshots {
     // SCShareableContent.getExcludingDesktopWindows is expensive for the OS; we cache as much as possible
     static var cachedSCWindows = [SCWindow]()
 
     static func oneTimeScreenshots(_ windowsToScreenshot: [Window], _ source: RefreshCausedBy) {
-        let windows = windowsToScreenshot.compactMap { $0.cgWindowId }
+        let (windows, snapshots) = windowSnapshots(windowsToScreenshot)
         guard !windows.isEmpty else { return }
         BackgroundWork.screenshotsQueue.addOperation {
             guard source != .refreshOnlyThumbnailsAfterShowUi || App.appIsBeingUsed else { return }
             let (cachedWindows, notCachedWindows) = sortCachedAndNotCached(windows)
             Logger.debug { "cached:\(cachedWindows.map { $0.windowID }) notCached:\(notCachedWindows)" }
-            handleCachedWindows(cachedWindows, source)
-            handleNotCachedWindows(notCachedWindows, source)
+            handleCachedWindows(cachedWindows, source, snapshots)
+            handleNotCachedWindows(notCachedWindows, source, snapshots)
         }
     }
 
-    private static func handleCachedWindows(_ cachedWindows: [SCWindow], _ source: RefreshCausedBy) {
+    private static func windowSnapshots(_ windowsToScreenshot: [Window]) -> ([CGWindowID], [CGWindowID: ScreenshotWindowSnapshot]) {
+        if Thread.isMainThread {
+            return makeWindowSnapshots(windowsToScreenshot)
+        }
+        return DispatchQueue.main.sync {
+            makeWindowSnapshots(windowsToScreenshot)
+        }
+    }
+
+    private static func makeWindowSnapshots(_ windowsToScreenshot: [Window]) -> ([CGWindowID], [CGWindowID: ScreenshotWindowSnapshot]) {
+        var windows = [CGWindowID]()
+        var snapshots = [CGWindowID: ScreenshotWindowSnapshot]()
+        let previewSelectedWindow = Preferences.previewSelectedWindow
+        let maxThumbnailSize = TilesPanel.maxPossibleThumbnailSize
+        for window in windowsToScreenshot {
+            guard let cgWindowId = window.cgWindowId, let size = window.size else { continue }
+            windows.append(cgWindowId)
+            snapshots[cgWindowId] = ScreenshotWindowSnapshot(cgWindowId: cgWindowId, size: size, scaleFactor: scaleFactor(for: window.screenId), debugId: window.debugId, previewSelectedWindow: previewSelectedWindow, maxThumbnailSize: maxThumbnailSize)
+        }
+        return (windows, snapshots)
+    }
+
+    private static func scaleFactor(for screenId: ScreenUuid?) -> CGFloat {
+        if let screenId,
+           let screen = Screens.all[screenId] {
+            return screen.backingScaleFactor
+        }
+        return NSScreen.preferred.backingScaleFactor
+    }
+
+    private static func handleCachedWindows(_ cachedWindows: [SCWindow], _ source: RefreshCausedBy, _ snapshots: [CGWindowID: ScreenshotWindowSnapshot]) {
         guard !cachedWindows.isEmpty else { return }
         for cachedWindow in cachedWindows {
-            oneTimeCapture(cachedWindow, source)
+            oneTimeCapture(cachedWindow, source, snapshots[cachedWindow.windowID])
         }
     }
 
-    private static func handleNotCachedWindows(_ notCachedWindows: [CGWindowID], _ source: RefreshCausedBy) {
+    private static func handleNotCachedWindows(_ notCachedWindows: [CGWindowID], _ source: RefreshCausedBy, _ snapshots: [CGWindowID: ScreenshotWindowSnapshot]) {
         guard !notCachedWindows.isEmpty else { return }
         SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { shareableContent, error in
             guard let shareableContent, error == nil else { Logger.error { "\(shareableContent == nil) \(error)" }; return }
@@ -36,7 +75,7 @@ class WindowCaptureScreenshots {
                 guard source != .refreshOnlyThumbnailsAfterShowUi || App.appIsBeingUsed else { return }
                 for notCachedWindow in notCachedWindows {
                     if let cachedWindow = (cachedSCWindows.first { $0.windowID == notCachedWindow }) {
-                        oneTimeCapture(cachedWindow, source)
+                        oneTimeCapture(cachedWindow, source, snapshots[notCachedWindow])
                     } else {
                         Logger.debug { "wid:\(notCachedWindow) was not found in SCShareableContent windows" }
                     }
@@ -58,20 +97,20 @@ class WindowCaptureScreenshots {
         return (cachedWindows, notCachedWindows)
     }
 
-    private static func oneTimeCapture(_ scWindow: SCWindow, _ source: RefreshCausedBy) {
-        guard !App.isTerminating, let window = (Windows.list.first { $0.cgWindowId == scWindow.windowID }), window.size != nil else { return }
-        let config = SCStreamConfiguration.forWindow(scWindow, window, false)
+    private static func oneTimeCapture(_ scWindow: SCWindow, _ source: RefreshCausedBy, _ snapshot: ScreenshotWindowSnapshot?) {
+        guard !App.isTerminating, let snapshot else { return }
+        let config = SCStreamConfiguration.forWindow(scWindow, snapshot, false)
         let filter = SCContentFilter(desktopIndependentWindow: scWindow)
         ActiveWindowCaptures.increment()
         SCScreenshotManager.captureSampleBuffer(contentFilter: filter, configuration: config) { sampleBuffer, error in
             ActiveWindowCaptures.decrement()
-            guard let sampleBuffer, error == nil else { Logger.error { "\(window.debugId) \(sampleBuffer == nil) \(error)" }; return }
+            guard let sampleBuffer, error == nil else { Logger.error { "\(snapshot.debugId) \(sampleBuffer == nil) \(error)" }; return }
             guard source != .refreshOnlyThumbnailsAfterShowUi || App.appIsBeingUsed else { return }
             let pixelBuffer: CVPixelBuffer? = sampleBuffer.pixelBuffer() ?? sampleBuffer.imageBuffer
-            guard let pixelBuffer else { Logger.error { "\(window.debugId) no pixelBuffer" }; return }
+            guard let pixelBuffer else { Logger.error { "\(snapshot.debugId) no pixelBuffer" }; return }
             DispatchQueue.main.async {
                 guard source != .refreshOnlyThumbnailsAfterShowUi || App.appIsBeingUsed else { return }
-                if let window = (Windows.list.first { $0.cgWindowId == scWindow.windowID }) {
+                if let window = (Windows.list.first { $0.cgWindowId == snapshot.cgWindowId }) {
                     window.refreshThumbnail(.pixelBuffer(pixelBuffer))
                 }
             }
@@ -231,9 +270,9 @@ class WindowCaptureScreenshotsPrivateApi {
 
 @available(macOS 12.3, *)
 extension SCStreamConfiguration {
-    static func forWindow(_ scWindow: SCWindow, _ window: Window, _ video: Bool) -> SCStreamConfiguration {
+    fileprivate static func forWindow(_ scWindow: SCWindow, _ snapshot: ScreenshotWindowSnapshot, _ video: Bool) -> SCStreamConfiguration {
         let config = SCStreamConfiguration()
-        config.setWindowSize(scWindow, window)
+        config.setWindowSize(scWindow, snapshot)
         config.pixelFormat = kCVPixelFormatType_32BGRA
         config.showsCursor = false
         // if video {
@@ -249,27 +288,17 @@ extension SCStreamConfiguration {
         return config
     }
 
-    private func windowScaleFactor(_ window: Window) -> CGFloat {
-        if let screenId = window.screenId,
-           let screen = Screens.all[screenId] {
-            return screen.backingScaleFactor
-        }
-        return NSScreen.preferred.backingScaleFactor
-    }
-
-    private func setWindowSize(_ scWindow: SCWindow, _ window: Window) {
-        let scaleFactor = windowScaleFactor(window)
-        // we use window.size and not scWindow.frame, as scWindow is cached thus its size can be stale. window.size is always up-to-date
-        let size = window.size! // we checked non-nil earlier, up the stack
+    private func setWindowSize(_ scWindow: SCWindow, _ snapshot: ScreenshotWindowSnapshot) {
+        let size = snapshot.size
         // window.size shows logical size. It doesn't change when the scaleFactor changes. We need to correct for this as we need to capture more and less pixels depending on DPI
-        let originalSize = NSSize(width: size.width * scaleFactor, height: size.height * scaleFactor)
+        let originalSize = NSSize(width: size.width * snapshot.scaleFactor, height: size.height * snapshot.scaleFactor)
         guard originalSize.width > 0, originalSize.height > 0 else { return }
-        if Preferences.previewSelectedWindow {
+        if snapshot.previewSelectedWindow {
             width = Int(originalSize.width)
             height = Int(originalSize.height)
         } else {
             // capture screenshots as small as needed for the thumbnails
-            let maxSize = TilesPanel.maxPossibleThumbnailSize
+            let maxSize = snapshot.maxThumbnailSize
             guard maxSize.width > 0, maxSize.height > 0 else { return }
             let scale = min(1.0, maxSize.width / originalSize.width, maxSize.height / originalSize.height)
             width = Int((originalSize.width * scale).rounded())

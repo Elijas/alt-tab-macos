@@ -10,6 +10,17 @@ class Window {
         kAXWindowMovedNotification,
     ]
     private static var globalCreationCounter = Int.zero
+    private struct FocusSnapshot {
+        let pid: pid_t
+        let targetCgWindowId: CGWindowID
+        let targetAxElement: AXUIElement?
+        let tab: TabFocusSnapshot?
+    }
+    private struct TabFocusSnapshot {
+        let parentCgWindowId: CGWindowID
+        let parentSpaceIds: [CGSSpaceID]
+        let parentAxElement: AXUIElement?
+    }
 
     var id: String
     var cgWindowId: CGWindowID?
@@ -224,47 +235,16 @@ class Window {
             // macOS bug: when switching to a System Preferences window in another space, it switches to that space,
             // but quickly switches back to another window in that space
             // You can reproduce this buggy behaviour by clicking on the dock icon, proving it's an OS bug
-            BackgroundWork.accessibilityCommandsQueue.addOperation { [weak self] in
-                guard let self else { return }
+            guard let snapshot = focusSnapshot() else { return }
+            BackgroundWork.accessibilityCommandsQueue.addOperation {
                 var psn = ProcessSerialNumber()
-                GetProcessForPID(self.application.pid, &psn)
-                if self.isTabChild,
-                   let parentWindow = Windows.list.first(where: { $0.cgWindowId == self.parentWindowId }),
-                   let parentCgId = parentWindow.cgWindowId {
-                    let parentSpaceIds = Set(parentWindow.spaceIds)
-                    // Fresh CGS query to check if parent's space is already visible
-                    let currentVisibleSpaces = (CGSCopyManagedDisplaySpaces(CGS_CONNECTION) as! [NSDictionary]).compactMap {
-                        ($0["Current Space"] as? NSDictionary)?["id64"] as? CGSSpaceID
-                    }
-                    let needsSpaceSwitch = !currentVisibleSpaces.contains(where: { parentSpaceIds.contains($0) })
-                    // Always use parent's cgWindowId — tab has no space assignment
-                    _SLPSSetFrontProcessWithOptions(&psn, parentCgId, SLPSMode.userGenerated.rawValue)
-                    if needsSpaceSwitch {
-                        // Cross-space: fully focus parent to trigger space switch,
-                        // then poll until CGS reports the parent's space as visible.
-                        parentWindow.makeKeyWindow(&psn)
-                        try? parentWindow.axUiElement?.focusWindow()
-                        for i in 0..<40 {
-                            if i > 0 { Thread.sleep(forTimeInterval: 0.05) }
-                            let visibleSpaces = (CGSCopyManagedDisplaySpaces(CGS_CONNECTION) as! [NSDictionary]).compactMap {
-                                ($0["Current Space"] as? NSDictionary)?["id64"] as? CGSSpaceID
-                            }
-                            if visibleSpaces.contains(where: { parentSpaceIds.contains($0) }) {
-                                break
-                            }
-                        }
-                    }
-                    // Select the specific tab. makeKeyWindow sends raw WS events (fast).
-                    // AXRaise runs async — tab axUiElements are often stale, and the
-                    // synchronous 1s AX timeout was causing the perceived delay.
-                    self.makeKeyWindow(&psn)
-                    BackgroundWork.accessibilityCommandsQueue.addOperation { [weak self] in
-                        try? self?.axUiElement?.focusWindow()
-                    }
+                GetProcessForPID(snapshot.pid, &psn)
+                if let tab = snapshot.tab {
+                    Window.focusTabChild(snapshot, tab, &psn)
                 } else {
-                    _SLPSSetFrontProcessWithOptions(&psn, self.cgWindowId!, SLPSMode.userGenerated.rawValue)
-                    self.makeKeyWindow(&psn)
-                    try? self.axUiElement!.focusWindow()
+                    _SLPSSetFrontProcessWithOptions(&psn, snapshot.targetCgWindowId, SLPSMode.userGenerated.rawValue)
+                    Window.makeKeyWindow(snapshot.targetCgWindowId, &psn)
+                    try? snapshot.targetAxElement!.focusWindow()
                 }
                 DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(50)) {
                     Windows.previewSelectedWindowIfNeeded()
@@ -273,12 +253,55 @@ class Window {
         }
     }
 
+    private func focusSnapshot() -> FocusSnapshot? {
+        guard let targetCgWindowId = cgWindowId else { return nil }
+        return FocusSnapshot(pid: application.pid, targetCgWindowId: targetCgWindowId, targetAxElement: axUiElement, tab: tabFocusSnapshot())
+    }
+
+    private func tabFocusSnapshot() -> TabFocusSnapshot? {
+        guard isTabChild,
+              let parentWindow = (Windows.list.first { $0.cgWindowId == parentWindowId }),
+              let parentCgWindowId = parentWindow.cgWindowId else { return nil }
+        return TabFocusSnapshot(parentCgWindowId: parentCgWindowId, parentSpaceIds: parentWindow.spaceIds, parentAxElement: parentWindow.axUiElement)
+    }
+
+    private static func focusTabChild(_ snapshot: FocusSnapshot, _ tab: TabFocusSnapshot, _ psn: inout ProcessSerialNumber) {
+        let parentSpaceIds = Set(tab.parentSpaceIds)
+        let currentVisibleSpaces = (CGSCopyManagedDisplaySpaces(CGS_CONNECTION) as! [NSDictionary]).compactMap {
+            ($0["Current Space"] as? NSDictionary)?["id64"] as? CGSSpaceID
+        }
+        let needsSpaceSwitch = !currentVisibleSpaces.contains(where: { parentSpaceIds.contains($0) })
+        _SLPSSetFrontProcessWithOptions(&psn, tab.parentCgWindowId, SLPSMode.userGenerated.rawValue)
+        if needsSpaceSwitch {
+            makeKeyWindow(tab.parentCgWindowId, &psn)
+            try? tab.parentAxElement?.focusWindow()
+            waitForVisibleSpace(parentSpaceIds)
+        }
+        makeKeyWindow(snapshot.targetCgWindowId, &psn)
+        BackgroundWork.accessibilityCommandsQueue.addOperation {
+            try? snapshot.targetAxElement?.focusWindow()
+        }
+    }
+
+    private static func waitForVisibleSpace(_ parentSpaceIds: Set<CGSSpaceID>) {
+        for i in 0..<40 {
+            if i > 0 { Thread.sleep(forTimeInterval: 0.05) }
+            let visibleSpaces = (CGSCopyManagedDisplaySpaces(CGS_CONNECTION) as! [NSDictionary]).compactMap {
+                ($0["Current Space"] as? NSDictionary)?["id64"] as? CGSSpaceID
+            }
+            if visibleSpaces.contains(where: { parentSpaceIds.contains($0) }) {
+                break
+            }
+        }
+    }
+
     /// The following function was ported from https://github.com/Hammerspoon/hammerspoon/issues/370#issuecomment-545545468
-    private func makeKeyWindow(_ psn: inout ProcessSerialNumber) -> Void {
+    private static func makeKeyWindow(_ cgWindowId: CGWindowID, _ psn: inout ProcessSerialNumber) {
         var bytes = [UInt8](repeating: 0, count: 0xf8)
+        var windowId = cgWindowId
         bytes[0x04] = 0xf8
         bytes[0x3a] = 0x10
-        memcpy(&bytes[0x3c], &cgWindowId, MemoryLayout<UInt32>.size)
+        memcpy(&bytes[0x3c], &windowId, MemoryLayout<UInt32>.size)
         memset(&bytes[0x20], 0xff, 0x10)
         bytes[0x08] = 0x01
         SLPSPostEventRecordTo(&psn, &bytes)
