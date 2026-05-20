@@ -156,10 +156,12 @@ class SidePanel: NSPanel {
 
     func syncHover(at location: NSPoint) {
         let containsMouse = frame.contains(location)
-        guard isMouseInside != containsMouse else { return }
-        isMouseInside = containsMouse
-        applyHoverState()
-        if Self.isIconsOnly { applyCurrentWidth() }
+        if isMouseInside != containsMouse {
+            isMouseInside = containsMouse
+            applyHoverState()
+            if Self.isIconsOnly { applyCurrentWidth() }
+        }
+        listView.syncHover(at: containsMouse ? location : nil)
     }
 
     private func setFrameIfNeeded(_ newFrame: NSRect, display: Bool) {
