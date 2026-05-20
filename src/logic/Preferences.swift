@@ -75,6 +75,7 @@ class Preferences {
             "hoverColorDark": "0A84FF",
             "sidePanelCompactWidth": "90",
             "sidePanelCompactLetters": "5",
+            "sidePanelCompactLettersIndented": "0",
             "sidePanelDisabledScreens": "[]",
             "spaceLabels": "{}",
         ]
@@ -169,6 +170,7 @@ class Preferences {
     static var hoverColorDark: String { CachedUserDefaults.string("hoverColorDark") }
     static var sidePanelCompactWidth: Int { CachedUserDefaults.int("sidePanelCompactWidth") }
     static var sidePanelCompactLetters: Int { CachedUserDefaults.int("sidePanelCompactLetters") }
+    static var sidePanelCompactLettersIndented: Int { CachedUserDefaults.int("sidePanelCompactLettersIndented") }
     static var sidePanelDisabledScreens: [String] { CachedUserDefaults.json("sidePanelDisabledScreens", [String].self) }
     static var spaceLabels: [String: String] { CachedUserDefaults.json("spaceLabels", [String: String].self) }
 

@@ -102,6 +102,7 @@ class PanelTab {
         let sideFontSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelFontSize", 9, 30, 0, false, "pt", width: 140, extraAction: sidePanelRebuildAction)
         let compactWidthSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelCompactWidth", 30, 260, 0, false, "px", width: 140, extraAction: rowColorAction)
         let compactLettersSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelCompactLetters", 0, 30, 0, false, "", width: 140, extraAction: rowColorAction)
+        let compactLettersIndentedSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelCompactLettersIndented", 0, 30, 0, false, "", width: 140, extraAction: rowColorAction)
 
         let sideTable = TableGroupView(title: "Side Panel", width: SettingsWindow.contentWidth)
         sideTable.addRow(enable)
@@ -111,6 +112,7 @@ class PanelTab {
         sideTable.addRow(leftText: "Font size", rightViews: [sideFontSlider[1], sideFontSlider[2]])
         sideTable.addRow(leftText: "Compact width", rightViews: [compactWidthSlider[1], compactWidthSlider[2]])
         sideTable.addRow(leftText: "Compact letters", rightViews: [compactLettersSlider[1], compactLettersSlider[2]])
+        sideTable.addRow(leftText: "Compact letters (indented items)", rightViews: [compactLettersIndentedSlider[1], compactLettersIndentedSlider[2]])
 
         let tabHierarchySwitch = LabelAndControl.makeSwitch("showTabHierarchyInSidePanel", extraAction: { _ in
             SidePanelManager.shared.refreshPanels()
