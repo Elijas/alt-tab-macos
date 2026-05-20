@@ -223,7 +223,7 @@ class SidePanelManager {
     }
 
     /// Shared pipeline: compute grouped window data for all screens.
-    /// Used by both refreshPanelsNow() (to update views) and snapshotPanelContents() (for CLI).
+    /// Used by both refreshPanelsNow() (to update views) and snapshotSidePanelContents() (for CLI).
     private func computeAllScreenData() -> (
         mainPanelData: [ScreenColumnData],
         sidePanelResults: [(ScreenUuid, (groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int?, spaceIndexes: [SpaceIndex], spaceIds: [CGSSpaceID]))]
@@ -427,11 +427,14 @@ class SidePanelManager {
 
     // MARK: - CLI: panel contents snapshot
 
-    /// Serialize the same grouped window data that both panels display, for CLI diagnostic output.
+    /// Serialize the same grouped window data that side panels display, for CLI diagnostic output.
     /// Calls computeAllScreenData() — the same pipeline as refreshPanelsNow().
-    func snapshotPanelContents() -> [PanelScreenSnapshot] {
-        let (allScreenData, _) = computeAllScreenData()
-        return allScreenData.map { data in
+    func snapshotSidePanelContents() -> [PanelScreenSnapshot] {
+        let (allScreenData, sidePanelResults) = computeAllScreenData()
+        let screenNamesById = Dictionary(uniqueKeysWithValues: allScreenData.map { ($0.screenId, $0.screenName) })
+        return sidePanelResults.map { result in
+            let screenId = result.0 as String
+            let data = result.1
             let spaceGroups = data.groups.enumerated().map { (groupIdx, windows) -> PanelSpaceGroup in
                 let spaceIndex = groupIdx < data.spaceIndexes.count ? data.spaceIndexes[groupIdx] : 0
                 let spaceId = groupIdx < data.spaceIds.count ? data.spaceIds[groupIdx] : 0
@@ -457,8 +460,8 @@ class SidePanelManager {
                 )
             }
             return PanelScreenSnapshot(
-                screenName: data.screenName,
-                screenId: data.screenId,
+                screenName: screenNamesById[screenId] ?? screenId,
+                screenId: screenId,
                 isActiveScreen: data.isActiveScreen,
                 spaces: spaceGroups
             )
