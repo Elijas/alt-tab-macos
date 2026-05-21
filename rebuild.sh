@@ -8,41 +8,38 @@ APP_NAME="${APP_NAME:-$(awk -F= '/^PRODUCT_NAME/ { gsub(/[[:space:]]/, "", $2); 
 BUNDLE_ID="${BUNDLE_ID:-$(awk -F= '/^PRODUCT_BUNDLE_IDENTIFIER/ { gsub(/[[:space:]]/, "", $2); print $2; exit }' "$CONFIG")}"
 CONFIGURATION="${CONFIGURATION:-Release}"
 SCHEME="${SCHEME:-Release}"
-DERIVED_DATA_ROOT="${DERIVED_DATA_ROOT:-$HOME/Library/Developer/Xcode/DerivedData}"
+# Project-local DerivedData: eliminates the multi-hash-dir ambiguity in Xcode's
+# default ~/Library/.../DerivedData layout. With a fixed -derivedDataPath, the
+# script always knows exactly where the build output lives — no need to "pick
+# newest" across hash directories that accumulate after Xcode upgrades.
+# Already covered by .gitignore (/DerivedData/).
+DERIVED_DATA_PATH="$(pwd)/DerivedData"
+APP_PATH="${DERIVED_DATA_PATH}/Build/Products/${CONFIGURATION}/${APP_NAME}.app"
+DSYM_PATH="${APP_PATH}.dSYM"
 INSTALL_PATH="/Applications/${APP_NAME}.app"
 
-find_newest_product() {
-    local suffix="$1"
-    find "$DERIVED_DATA_ROOT" -path "*/Build/Products/${CONFIGURATION}/${suffix}" -prune -print0 2>/dev/null \
-        | xargs -0 stat -f "%m %N" 2>/dev/null \
-        | sort -nr \
-        | sed -n '1s/^[0-9]* //p' \
-        || true
-}
-
 archive_dsym() {
-    local dsym uuid archive_dir
-    dsym="$(find_newest_product "${APP_NAME}.app.dSYM")"
-    [[ -n "$dsym" ]] || return 0
-    uuid="$(dwarfdump --uuid "$dsym" 2>/dev/null | awk '/arm64/ { print $2; exit }')"
+    local uuid archive_dir
+    [[ -d "$DSYM_PATH" ]] || return 0
+    uuid="$(dwarfdump --uuid "$DSYM_PATH" 2>/dev/null | awk '/arm64/ { print $2; exit }')"
     [[ -n "$uuid" ]] || return 0
     archive_dir="$HOME/Library/Logs/${APP_NAME}/dsyms/${uuid}"
     mkdir -p "$archive_dir"
     rm -rf "${archive_dir}/${APP_NAME}.app.dSYM"
-    cp -R "$dsym" "$archive_dir/"
+    cp -R "$DSYM_PATH" "$archive_dir/"
 }
 
-echo "Building ${APP_NAME} (${CONFIGURATION})"
+echo "Building ${APP_NAME} (${CONFIGURATION}) -> ${DERIVED_DATA_PATH}"
 xcodebuild \
     -workspace alt-tab-macos.xcworkspace \
     -scheme "$SCHEME" \
     -configuration "$CONFIGURATION" \
+    -derivedDataPath "$DERIVED_DATA_PATH" \
     build \
     CODE_SIGN_IDENTITY="-" \
     DEVELOPMENT_TEAM=""
 
-APP_PATH="$(find_newest_product "${APP_NAME}.app")"
-[[ -n "$APP_PATH" ]] || { echo "Built app not found under ${DERIVED_DATA_ROOT}" >&2; exit 1; }
+[[ -d "$APP_PATH" ]] || { echo "Built app not found at ${APP_PATH}" >&2; exit 1; }
 
 echo "Archiving dSYM"
 archive_dsym
