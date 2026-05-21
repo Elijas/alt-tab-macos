@@ -15,6 +15,8 @@ class SidePanel: NSPanel {
     private let panelRoot = NSView()
     private let panelBody = NSVisualEffectView()
     private let buttonBar = NSView()
+    private var hideFifteenButton: NSButton!
+    private var hideTwoMinutesButton: NSButton!
     private var lrButton: NSButton!
     private var iconsOnlyButton: NSButton!
     private var panelBodyWidthConstraint: NSLayoutConstraint!
@@ -60,29 +62,34 @@ class SidePanel: NSPanel {
         buttonBar.translatesAutoresizingMaskIntoConstraints = false
         panelBody.addSubview(buttonBar)
 
-        let hideButton = makeButton("hide 10s", #selector(hideTenSeconds))
+        hideFifteenButton = makeButton(hideButtonTitle("15s"), #selector(hideFifteenSeconds))
+        hideTwoMinutesButton = makeButton(hideButtonTitle("2m"), #selector(hideTwoMinutes))
         let downButton = makeButton("▼", #selector(shiftOffsetDown))
         let upButton = makeButton("▲", #selector(shiftOffsetUp))
         lrButton = makeButton(Self.isLeftAligned ? "▶" : "◀", #selector(toggleLeftRight))
         iconsOnlyButton = makeButton(Self.isLeftAligned ? "◀" : "▶", #selector(toggleIconsOnly))
         let offButton = makeButton("off", #selector(turnOff))
-        buttonBar.addSubview(hideButton)
+        buttonBar.addSubview(hideFifteenButton)
+        buttonBar.addSubview(hideTwoMinutesButton)
         buttonBar.addSubview(downButton)
         buttonBar.addSubview(upButton)
         buttonBar.addSubview(lrButton)
         buttonBar.addSubview(iconsOnlyButton)
         buttonBar.addSubview(offButton)
 
-        hideButton.translatesAutoresizingMaskIntoConstraints = false
+        hideFifteenButton.translatesAutoresizingMaskIntoConstraints = false
+        hideTwoMinutesButton.translatesAutoresizingMaskIntoConstraints = false
         downButton.translatesAutoresizingMaskIntoConstraints = false
         upButton.translatesAutoresizingMaskIntoConstraints = false
         lrButton.translatesAutoresizingMaskIntoConstraints = false
         iconsOnlyButton.translatesAutoresizingMaskIntoConstraints = false
         offButton.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            hideButton.leadingAnchor.constraint(equalTo: buttonBar.leadingAnchor, constant: 4),
-            hideButton.centerYAnchor.constraint(equalTo: buttonBar.centerYAnchor),
-            downButton.leadingAnchor.constraint(equalTo: hideButton.trailingAnchor, constant: 4),
+            hideFifteenButton.leadingAnchor.constraint(equalTo: buttonBar.leadingAnchor, constant: 4),
+            hideFifteenButton.centerYAnchor.constraint(equalTo: buttonBar.centerYAnchor),
+            hideTwoMinutesButton.leadingAnchor.constraint(equalTo: hideFifteenButton.trailingAnchor, constant: 4),
+            hideTwoMinutesButton.centerYAnchor.constraint(equalTo: buttonBar.centerYAnchor),
+            downButton.leadingAnchor.constraint(equalTo: hideTwoMinutesButton.trailingAnchor, constant: 4),
             downButton.centerYAnchor.constraint(equalTo: buttonBar.centerYAnchor),
             upButton.leadingAnchor.constraint(equalTo: downButton.trailingAnchor, constant: 4),
             upButton.centerYAnchor.constraint(equalTo: buttonBar.centerYAnchor),
@@ -185,9 +192,21 @@ class SidePanel: NSPanel {
         return button
     }
 
-    @objc private func hideTenSeconds() {
+    private func hideButtonTitle(_ duration: String) -> String {
+        Self.isLeftAligned ? "◀ \(duration)" : "\(duration) ▶"
+    }
+
+    @objc private func hideFifteenSeconds() {
+        hide(for: 15)
+    }
+
+    @objc private func hideTwoMinutes() {
+        hide(for: 120)
+    }
+
+    private func hide(for seconds: TimeInterval) {
         orderOut(nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { [weak self] in
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
             self?.orderFront(nil)
         }
     }
@@ -208,6 +227,8 @@ class SidePanel: NSPanel {
     @objc private func toggleLeftRight() {
         Self.isLeftAligned.toggle()
         UserDefaults.standard.set(Self.isLeftAligned, forKey: Self.leftAlignedDefaultsKey)
+        hideFifteenButton.title = hideButtonTitle("15s")
+        hideTwoMinutesButton.title = hideButtonTitle("2m")
         lrButton.title = Self.isLeftAligned ? "▶" : "◀"
         iconsOnlyButton.title = Self.isLeftAligned ? "◀" : "▶"
         applyBodyAlignment()
