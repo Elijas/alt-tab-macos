@@ -110,14 +110,18 @@ class SidePanel: NSPanel {
         syncHover(at: NSEvent.mouseLocation)
     }
 
+    private var usesCompactLayout: Bool {
+        !isMouseInside
+    }
+
     private var currentWidth: CGFloat {
-        SidePanelRow.panelWidth
+        usesCompactLayout ? SidePanelRow.compactPanelWidth : SidePanelRow.panelWidth
     }
 
     private func applyCurrentWidth() {
         panelBodyWidthConstraint.constant = currentWidth
         panelRoot.layoutSubtreeIfNeeded()
-        listView.applyIconsOnly(false)
+        listView.applyIconsOnly(usesCompactLayout)
     }
 
     private func applyBodyAlignment() {
@@ -141,6 +145,7 @@ class SidePanel: NSPanel {
         if isMouseInside != containsMouse {
             isMouseInside = containsMouse
             applyHoverState()
+            applyCurrentWidth()
         }
         listView.syncHover(at: containsMouse ? location : nil)
     }
@@ -231,7 +236,7 @@ class SidePanel: NSPanel {
             syncHover(at: NSEvent.mouseLocation)
             applyHoverState()
             listView.showTabHierarchy = showTabHierarchy
-            listView.applyIconsOnly(false)
+            listView.applyIconsOnly(usesCompactLayout)
             let contentHeight = listView.updateContents(groups, selectedWindowId: selectedWindowId, isActiveScreen: isActiveScreen, currentSpaceGroupIndex: currentSpaceGroupIndex)
 
             // reposition panel (clamp offset so panel edges stay on screen with buffer)
