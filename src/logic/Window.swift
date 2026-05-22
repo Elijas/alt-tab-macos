@@ -103,13 +103,19 @@ class Window {
         Logger.info { self.debugId }
     }
 
-    func updateFromAxAttributes(_ title: String?, _ size: CGSize?, _ position: CGPoint?, _ isFullscreen: Bool?, _ isMinimized: Bool?) {
-        self.title = bestEffortTitle(title)
+    @discardableResult
+    func updateFromAxAttributes(_ title: String?, _ size: CGSize?, _ position: CGPoint?, _ isFullscreen: Bool?, _ isMinimized: Bool?) -> Bool {
+        let newTitle = bestEffortTitle(title)
+        let newIsFullscreen = isFullscreen ?? false
+        let newIsMinimized = isMinimized ?? false
+        let changed = self.title != newTitle || self.size != size || self.position != position || self.isFullscreen != newIsFullscreen || self.isMinimized != newIsMinimized
+        self.title = newTitle
         self.size = size
         self.position = position
-        self.isFullscreen = isFullscreen ?? false
-        self.isMinimized = isMinimized ?? false
-        lastSearchQuery = nil
+        self.isFullscreen = newIsFullscreen
+        self.isMinimized = newIsMinimized
+        if changed { lastSearchQuery = nil }
+        return changed
     }
 
     func isEqualRobust(_ otherWindowAxUiElement: AXUIElement, _ otherWindowWid: CGWindowID?) -> Bool {

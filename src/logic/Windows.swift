@@ -5,6 +5,9 @@ class Windows {
     static var selectedWindowIndex = Int(0)
     static var selectedWindowTarget: String?
     static var hoveredWindowIndex: Int?
+    private(set) static var modelVersion = 0
+    private static var lastBackgroundThumbnailRequestNs = [CGWindowID: UInt64]()
+    private static let backgroundThumbnailCooldownNs: UInt64 = 30_000_000_000
     // we use this to track if the focused window changed while alt-tab was open
     private static var lastFocusedWindowTarget: String?
     private static var lastWindowActivityType = WindowActivityType.none
@@ -14,6 +17,11 @@ class Windows {
 
     static func shouldDisplay(_ window: Window) -> Bool {
         window.shouldShowTheUser && Search.matches(window, query: searchQuery)
+    }
+
+    static func markModelChanged() {
+        modelVersion += 1
+        SidePanelManager.shared.resetAdaptiveRefreshBackoff(reason: "model_changed")
     }
 
     static func updateSearchQuery(_ query: String) {
@@ -89,8 +97,15 @@ class Windows {
     }
 
     static func updatesBeforeShowing() -> Bool {
-        if MissionControl.state() == .showAllWindows || MissionControl.state() == .showFrontWindows { return false }
-        if list.isEmpty { return true }
+        let span = PerfDebug.start("windows.updatesBeforeShowing", fields: ["windows": list.count])
+        if MissionControl.state() == .showAllWindows || MissionControl.state() == .showFrontWindows {
+            span?.finish(["skipped": true, "reason": "mission_control"])
+            return false
+        }
+        if list.isEmpty {
+            span?.finish(["skipped": true, "reason": "empty"])
+            return true
+        }
         // TODO: find a way to update space info when spaces are changed, instead of on every trigger
         // workaround: when Preferences > Mission Control > "Displays have separate Spaces" is unchecked,
         // switching between displays doesn't trigger .activeSpaceDidChangeNotification; we get the latest manually
@@ -107,28 +122,58 @@ class Windows {
         if Preferences.showTabHierarchyInMainPanel {
             list = TabHierarchy.orderWithTabHierarchy(list)
         }
+        span?.finish(["shown_windows": list.filter { $0.shouldShowTheUser }.count, "changed": true])
         return true
     }
 
     // dispatch screenshot requests off the main-thread, then wait for completion
     static func refreshThumbnailsAsync(_ windows: [Window], _ source: RefreshCausedBy, windowRemoved: Bool = false) {
+        let requestSpan = PerfDebug.start("windows.refreshThumbnailsAsync", fields: ["requested_windows": windows.count, "source": String(describing: source), "window_removed": windowRemoved, "app_is_being_used": App.appIsBeingUsed])
         guard (!windows.isEmpty || windowRemoved) && ScreenRecordingPermission.status == .granted
                && !Preferences.onlyShowApplications()
                && (!Appearance.hideThumbnails || Preferences.previewSelectedWindow)
-               && (Preferences.captureWindowsInBackground || App.appIsBeingUsed) else { return }
+               && (Preferences.captureWindowsInBackground || App.appIsBeingUsed) else {
+            requestSpan?.finish(["eligible": false])
+            return
+        }
         var eligibleWindows = [Window]()
         for window in windows {
             if !window.isWindowlessApp, let cgWindowId = window.cgWindowId, cgWindowId != CGWindowID(bitPattern: -1) {
                 eligibleWindows.append(window)
             }
         }
-        guard (!eligibleWindows.isEmpty || windowRemoved) else { return }
+        let beforeBackgroundFilter = eligibleWindows.count
+        eligibleWindows = filterBackgroundThumbnailRequests(eligibleWindows, source)
+        guard (!eligibleWindows.isEmpty || windowRemoved) else {
+            requestSpan?.finish(["eligible": false, "eligible_windows": 0, "background_filtered": beforeBackgroundFilter])
+            return
+        }
+        requestSpan?.finish(["eligible": true, "eligible_windows": eligibleWindows.count, "background_filtered": beforeBackgroundFilter - eligibleWindows.count])
         if #available(macOS 14.0, *),
            // mitigate macOS 15 bugs with ScreenCapture Kit (see https://github.com/lwouis/alt-tab-macos/issues/5190)
            ProcessInfo.processInfo.operatingSystemVersion.majorVersion != 15 {
             WindowCaptureScreenshots.oneTimeScreenshots(eligibleWindows, source)
         } else {
             WindowCaptureScreenshotsPrivateApi.oneTimeScreenshots(eligibleWindows, source)
+        }
+    }
+
+    private static func filterBackgroundThumbnailRequests(_ windows: [Window], _ source: RefreshCausedBy) -> [Window] {
+        guard source == .refreshUiAfterExternalEvent, !App.appIsBeingUsed else { return windows }
+        let now = DispatchTime.now().uptimeNanoseconds
+        return windows.filter { window in
+            guard let wid = window.cgWindowId else { return false }
+            if window.thumbnail == nil {
+                lastBackgroundThumbnailRequestNs[wid] = now
+                return true
+            }
+            guard let last = lastBackgroundThumbnailRequestNs[wid],
+                  now >= last,
+                  now - last < backgroundThumbnailCooldownNs else {
+                lastBackgroundThumbnailRequestNs[wid] = now
+                return true
+            }
+            return false
         }
     }
 
@@ -493,13 +538,16 @@ class Windows {
                 $0.lastFocusOrder += 1
             }
         }
+        markModelChanged()
         return windowsToRefresh
     }
 
     static func findOrCreate(_ windowAxUiElement: AXUIElement, _ wid: CGWindowID, _ app: Application, _ level: CGWindowLevel, _ title: String?, _ subrole: String?, _ role: String?, _ size: CGSize?, _ position: CGPoint?, _ isFullscreen: Bool?, _ isMinimized: Bool?) -> (Window?, Bool) {
         if let window = (list.first { $0.isEqualRobust(windowAxUiElement, wid) }) {
             // on any window event, we take the opportunity to refresh all window attributes
-            window.updateFromAxAttributes(title, size, position, isFullscreen, isMinimized)
+            if window.updateFromAxAttributes(title, size, position, isFullscreen, isMinimized) {
+                markModelChanged()
+            }
             return (window, false)
         }
         guard WindowDiscriminator.isActualWindow(app, wid, level, title, subrole, role, size) else { return (nil, false) }
@@ -511,12 +559,14 @@ class Windows {
     static func appendWindow(_ window: Window) {
         window.lastFocusOrder = list.count
         list.append(window)
+        markModelChanged()
         if list.count > TilesView.recycledViews.count {
             TilesView.recycledViews.append(TileView())
         }
     }
 
     static func removeWindows(_ windows: [Window], _ addWindowlessWindowIfNeeded: Bool) {
+        guard !windows.isEmpty else { return }
         for w in windows {
             if w.application.focusedWindow?.cgWindowId == w.cgWindowId {
                 w.application.focusedWindow = nil
@@ -544,6 +594,7 @@ class Windows {
         if addWindowlessWindowIfNeeded {
             windows.forEach { $0.application.addWindowlessWindowIfNeeded() }
         }
+        markModelChanged()
         lastFocusedWindowTarget = getLastFocusedOrderWindowIndex().map { list[$0].id }
         App.refreshOpenUiAfterExternalEvent([], windowRemoved: true)
     }

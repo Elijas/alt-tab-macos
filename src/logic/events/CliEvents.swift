@@ -52,7 +52,7 @@ class CliServer {
             )
         }
         if rawValue == "--detailed-list" {
-            Applications.removeZombieWindows()
+            Applications.removeZombieWindows(force: true)
             // refresh space/screen assignments so CLI returns fresh data
             Spaces.refresh()
             for window in Windows.list {
@@ -267,7 +267,7 @@ class CliServer {
 
         target.focus()
         _ = Windows.updateLastFocusOrder(target)
-        SidePanelManager.shared.refreshPanels()
+        SidePanelManager.shared.refreshPanels(reason: "manual")
     }
 
     private static func tabGroupRepresentatives(_ windows: [Window]) -> [Window] {

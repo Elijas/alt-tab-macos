@@ -19,6 +19,15 @@ class AXCallScheduler {
         case throttled
         case executing
         case retrying
+
+        var perfName: String {
+            switch self {
+                case .idle: return "idle"
+                case .throttled: return "throttled"
+                case .executing: return "executing"
+                case .retrying: return "retrying"
+            }
+        }
     }
 
     private struct KeyState {
@@ -40,6 +49,9 @@ class AXCallScheduler {
     func schedule(key: String, file: String = #file, function: String = #function, line: Int = #line, context: String = "", pid: pid_t? = nil, block: @escaping () throws -> Void) {
         lock.lock()
         var state = keyStates[key] ?? KeyState()
+        var perfFields = Self.perfFields(key, pid, context)
+        perfFields["phase"] = state.phase.perfName
+        PerfDebug.record("ax.schedule", fields: perfFields)
         switch state.phase {
         case .idle:
             let now = DispatchTime.now().uptimeNanoseconds
@@ -139,7 +151,12 @@ class AXCallScheduler {
         }
         lock.unlock()
 
-        if (try? block()) != nil {
+        var perfFields = Self.perfFields(key, pid, context)
+        perfFields["source"] = Self.logContext(file, function, line, context)
+        let span = PerfDebug.start("ax.call", fields: perfFields)
+        let success = (try? block()) != nil
+        span?.finish(["success": success])
+        if success {
             // success
             if let pid {
                 lock.lock()
@@ -159,6 +176,7 @@ class AXCallScheduler {
 
         let elapsed = Float(DispatchTime.now().uptimeNanoseconds - retryStartTime) / 1_000_000_000
         if elapsed >= Self.giveUpAfterSeconds {
+            PerfDebug.record("ax.timeout", fields: Self.perfFields(key, pid, context))
             Logger.info { "AX call timed out after \(Int(Self.giveUpAfterSeconds))s. \(Self.logContext(file, function, line, context))" }
             if let pid {
                 lock.lock()
@@ -184,6 +202,9 @@ class AXCallScheduler {
         lock.unlock()
 
         Logger.debug { "Retrying AX call in \(delayNs / 1_000_000)ms. \(Self.logContext(file, function, line, context))" }
+        perfFields = Self.perfFields(key, pid, context)
+        perfFields["delay_ms"] = Int(delayNs / 1_000_000)
+        PerfDebug.record("ax.retry", fields: perfFields)
         retryQueue.addOperationAfter(deadline: .now() + .nanoseconds(Int(delayNs))) { [self] in
             attemptBlock(key: key, pid: pid, file: file, function: function, line: line, context: context, retryStartTime: retryStartTime, block: block)
         }
@@ -248,5 +269,11 @@ class AXCallScheduler {
 
     private static func logContext(_ file: String, _ function: String, _ line: Int, _ context: String) -> String {
         "\((file as NSString).lastPathComponent):\(line) \(function) \(context)"
+    }
+
+    private static func perfFields(_ key: String, _ pid: pid_t?, _ context: String) -> [String: Any] {
+        var fields: [String: Any] = ["key": key, "context": context]
+        if let pid { fields["pid"] = Int(pid) }
+        return fields
     }
 }

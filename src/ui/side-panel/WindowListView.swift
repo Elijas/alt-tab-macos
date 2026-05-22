@@ -150,9 +150,11 @@ class WindowListView: NSView {
     /// auto-switch to compact single-line mode down to `compactRowHeight`, then scroll.
     func relayoutForBounds() {
         let _perfStart = DispatchTime.now()
+        let _perfSpan = PerfDebug.start("ui.windowList.relayoutForBounds", fields: ["order": layoutOrder.count, "icons_only": iconsOnly])
         defer {
             let ms = Double(DispatchTime.now().uptimeNanoseconds - _perfStart.uptimeNanoseconds) / 1_000_000
             if ms > 10 { Logger.info { "[perf] WindowListView.relayoutForBounds \(String(format: "%.1f", ms))ms order=\(self.layoutOrder.count)" } }
+            _perfSpan?.finish(["order": self.layoutOrder.count])
         }
         let width = max(bounds.width, minWidth)
         // Recompute header heights for current width (wrapping depends on available width)
@@ -256,9 +258,11 @@ class WindowListView: NSView {
     func updateContents(_ groups: [[Window]], selectedWindowId: CGWindowID?, isActiveScreen: Bool, currentSpaceGroupIndex: Int? = nil, spaceIndexes: [SpaceIndex] = [], spaceIds: [CGSSpaceID] = []) -> CGFloat {
         let _perfStart = DispatchTime.now()
         let totalRows = groups.reduce(0) { $0 + max($1.count, 1) }
+        let _perfSpan = PerfDebug.start("ui.windowList.updateContents", fields: ["groups": groups.count, "rows": totalRows, "icons_only": iconsOnly, "show_tab_hierarchy": showTabHierarchy])
         defer {
             let ms = Double(DispatchTime.now().uptimeNanoseconds - _perfStart.uptimeNanoseconds) / 1_000_000
             if ms > 15 { Logger.info { "[perf] WindowListView.updateContents \(String(format: "%.1f", ms))ms rows=\(totalRows) iconsOnly=\(self.iconsOnly)" } }
+            _perfSpan?.finish(["row_pool": self.rowPool.count, "separator_pool": self.separatorPool.count])
         }
         let separatorCount = max(groups.count - 1, 0)
         let headerCount = spaceIndexes.isEmpty ? 0 : groups.count

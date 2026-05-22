@@ -16,14 +16,21 @@ class WindowCaptureScreenshots {
     static var cachedSCWindows = [SCWindow]()
 
     static func oneTimeScreenshots(_ windowsToScreenshot: [Window], _ source: RefreshCausedBy) {
+        let span = PerfDebug.start("screenshots.oneTimeScreenshots", fields: ["requested_windows": windowsToScreenshot.count, "source": String(describing: source), "cached_sc_windows": cachedSCWindows.count])
         let (windows, snapshots) = windowSnapshots(windowsToScreenshot)
-        guard !windows.isEmpty else { return }
+        guard !windows.isEmpty else {
+            span?.finish(["eligible_windows": 0])
+            return
+        }
+        span?.finish(["eligible_windows": windows.count])
         BackgroundWork.screenshotsQueue.addOperation {
             guard source != .refreshOnlyThumbnailsAfterShowUi || App.appIsBeingUsed else { return }
+            let queueSpan = PerfDebug.start("screenshots.queueWork", fields: ["windows": windows.count, "source": String(describing: source)])
             let (cachedWindows, notCachedWindows) = sortCachedAndNotCached(windows)
             Logger.debug { "cached:\(cachedWindows.map { $0.windowID }) notCached:\(notCachedWindows)" }
             handleCachedWindows(cachedWindows, source, snapshots)
             handleNotCachedWindows(notCachedWindows, source, snapshots)
+            queueSpan?.finish(["cached": cachedWindows.count, "not_cached": notCachedWindows.count])
         }
     }
 
@@ -66,8 +73,14 @@ class WindowCaptureScreenshots {
 
     private static func handleNotCachedWindows(_ notCachedWindows: [CGWindowID], _ source: RefreshCausedBy, _ snapshots: [CGWindowID: ScreenshotWindowSnapshot]) {
         guard !notCachedWindows.isEmpty else { return }
+        let span = PerfDebug.start("screenshots.shareableContent", fields: ["not_cached": notCachedWindows.count, "source": String(describing: source)])
         SCShareableContent.getExcludingDesktopWindows(true, onScreenWindowsOnly: false) { shareableContent, error in
-            guard let shareableContent, error == nil else { Logger.error { "\(shareableContent == nil) \(error)" }; return }
+            guard let shareableContent, error == nil else {
+                span?.finish(["success": false, "error": String(describing: error)])
+                Logger.error { "\(shareableContent == nil) \(error)" }
+                return
+            }
+            span?.finish(["success": true, "sc_windows": shareableContent.windows.count])
             guard source != .refreshOnlyThumbnailsAfterShowUi || App.appIsBeingUsed else { return }
             // this callback is executed on an undetermined queue; we move execution to main-thread
             BackgroundWork.screenshotsQueue.addOperation {
@@ -99,12 +112,23 @@ class WindowCaptureScreenshots {
 
     private static func oneTimeCapture(_ scWindow: SCWindow, _ source: RefreshCausedBy, _ snapshot: ScreenshotWindowSnapshot?) {
         guard !App.isTerminating, let snapshot else { return }
+        guard WindowCaptureRequestDeduper.start(snapshot.cgWindowId) else {
+            PerfDebug.record("screenshots.captureSampleBuffer.skipped", fields: ["wid": snapshot.cgWindowId, "source": String(describing: source), "reason": "in_flight"])
+            return
+        }
         let config = SCStreamConfiguration.forWindow(scWindow, snapshot, false)
         let filter = SCContentFilter(desktopIndependentWindow: scWindow)
+        let span = PerfDebug.start("screenshots.captureSampleBuffer", fields: ["wid": snapshot.cgWindowId, "source": String(describing: source), "width": config.width, "height": config.height, "active_before": ActiveWindowCaptures.value()])
         ActiveWindowCaptures.increment()
         SCScreenshotManager.captureSampleBuffer(contentFilter: filter, configuration: config) { sampleBuffer, error in
+            WindowCaptureRequestDeduper.finish(snapshot.cgWindowId)
             ActiveWindowCaptures.decrement()
-            guard let sampleBuffer, error == nil else { Logger.error { "\(snapshot.debugId) \(sampleBuffer == nil) \(error)" }; return }
+            guard let sampleBuffer, error == nil else {
+                span?.finish(["success": false, "error": String(describing: error), "active_after": ActiveWindowCaptures.value()])
+                Logger.error { "\(snapshot.debugId) \(sampleBuffer == nil) \(error)" }
+                return
+            }
+            span?.finish(["success": true, "active_after": ActiveWindowCaptures.value()])
             guard source != .refreshOnlyThumbnailsAfterShowUi || App.appIsBeingUsed else { return }
             let pixelBuffer: CVPixelBuffer? = sampleBuffer.pixelBuffer() ?? sampleBuffer.imageBuffer
             guard let pixelBuffer else { Logger.error { "\(snapshot.debugId) no pixelBuffer" }; return }
@@ -120,6 +144,7 @@ class WindowCaptureScreenshots {
 
 class WindowCaptureScreenshotsPrivateApi {
     static func oneTimeScreenshots(_ eligibleWindows: [Window], _ source: RefreshCausedBy) {
+        PerfDebug.record("screenshots.privateApi.request", fields: ["eligible_windows": eligibleWindows.count, "source": String(describing: source)])
         for window in eligibleWindows {
             BackgroundWork.screenshotsQueue.addOperation { [weak window] in
                 guard source != .refreshOnlyThumbnailsAfterShowUi || App.appIsBeingUsed else { return }
@@ -135,11 +160,18 @@ class WindowCaptureScreenshotsPrivateApi {
 
     private static func oneTimeCapture(_ wid: CGWindowID) -> CGImage? {
         guard !App.isTerminating else { return nil }
+        guard WindowCaptureRequestDeduper.start(wid) else {
+            PerfDebug.record("screenshots.privateApi.capture.skipped", fields: ["wid": wid, "reason": "in_flight"])
+            return nil
+        }
+        defer { WindowCaptureRequestDeduper.finish(wid) }
         // we use CGSHWCaptureWindowList because it can screenshot minimized windows, which CGWindowListCreateImage can't
+        let span = PerfDebug.start("screenshots.privateApi.capture", fields: ["wid": wid, "active_before": ActiveWindowCaptures.value()])
         var windowId_ = wid
         ActiveWindowCaptures.increment()
         let list = CGSHWCaptureWindowList(CGS_CONNECTION, &windowId_, 1, [.ignoreGlobalClipShape, .bestResolution, .fullSize]).takeRetainedValue() as! [CGImage]
         ActiveWindowCaptures.decrement()
+        span?.finish(["success": !list.isEmpty, "images": list.count, "active_after": ActiveWindowCaptures.value()])
         return list.first
     }
 }
@@ -340,4 +372,26 @@ class ActiveWindowCaptures {
     static func increment() { OSAtomicIncrement32(&_count) }
     static func decrement() { OSAtomicDecrement32(&_count) }
     static func value() -> Int { Int(OSAtomicAdd32(0, &_count)) }
+}
+
+class WindowCaptureRequestDeduper {
+    private static let lock = NSLock()
+    private static var inFlight = Set<CGWindowID>()
+
+    static func start(_ wid: CGWindowID) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !inFlight.contains(wid) else { return false }
+        inFlight.insert(wid)
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + .seconds(15)) {
+            finish(wid)
+        }
+        return true
+    }
+
+    static func finish(_ wid: CGWindowID) {
+        lock.lock()
+        inFlight.remove(wid)
+        lock.unlock()
+    }
 }

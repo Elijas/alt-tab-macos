@@ -8,6 +8,7 @@ class Spaces {
     static var screenSpacesMap = [ScreenUuid: [CGSSpaceID]]()
     static var idsAndIndexes = [(CGSSpaceID, SpaceIndex)]()
     static var fullscreenSpaces = Set<CGSSpaceID>()
+    private static var lastPerfFingerprint = 0
 
     static func isSingleSpace() -> Bool {
         return idsAndIndexes.count == 1
@@ -18,18 +19,25 @@ class Spaces {
     }
 
     static func windowsInSpaces(_ spaceIds: [CGSSpaceID], _ includeInvisible: Bool = true) -> [CGWindowID] {
+        let span = PerfDebug.start("spaces.windowsInSpaces", fields: ["spaces": spaceIds.count, "include_invisible": includeInvisible])
         var set_tags = ([] as CGSCopyWindowsTags).rawValue
         var clear_tags = ([] as CGSCopyWindowsTags).rawValue
         var options = [.screenSaverLevel1000] as CGSCopyWindowsOptions
         if includeInvisible {
             options = [options, .invisible1, .invisible2]
         }
-        return CGSCopyWindowsWithOptionsAndTags(CGS_CONNECTION, 0, spaceIds as CFArray, options.rawValue, &set_tags, &clear_tags) as! [CGWindowID]
+        let result = CGSCopyWindowsWithOptionsAndTags(CGS_CONNECTION, 0, spaceIds as CFArray, options.rawValue, &set_tags, &clear_tags) as! [CGWindowID]
+        span?.finish(["windows": result.count])
+        return result
     }
 
     static func refresh() {
+        let oldFingerprint = lastPerfFingerprint
+        let span = PerfDebug.start("spaces.refresh", fields: ["old_spaces": idsAndIndexes.count, "old_visible": visibleSpaces.count])
         refreshAllIdsAndIndexes()
         updateCurrentSpace()
+        lastPerfFingerprint = perfFingerprint()
+        span?.finish(["spaces": idsAndIndexes.count, "screens": screenSpacesMap.count, "visible": visibleSpaces.count, "fullscreen": fullscreenSpaces.count, "changed": oldFingerprint != lastPerfFingerprint])
     }
 
     private static func updateCurrentSpace() {
@@ -69,6 +77,18 @@ class Spaces {
             visibleSpaces.append(currentSpaceId)
             currentSpaceForScreen[display] = currentSpaceId
         }
+    }
+
+    private static func perfFingerprint() -> Int {
+        var hash = Int(currentSpaceId)
+        for (spaceId, index) in idsAndIndexes {
+            hash = hash &* 31 &+ Int(spaceId)
+            hash = hash &* 31 &+ index
+        }
+        for spaceId in visibleSpaces {
+            hash = hash &* 31 &+ Int(spaceId)
+        }
+        return hash
     }
 }
 

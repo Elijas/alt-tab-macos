@@ -43,9 +43,11 @@ class MainPanel: NSWindow {
 
     func update(_ screenData: [ScreenColumnData]) {
         let _perfStart = DispatchTime.now()
+        let _perfSpan = PerfDebug.start("ui.mainPanel.update", fields: ["columns": screenData.count, "rows": screenData.reduce(0) { $0 + $1.groups.reduce(0) { $0 + $1.count } }])
         defer {
             let ms = Double(DispatchTime.now().uptimeNanoseconds - _perfStart.uptimeNanoseconds) / 1_000_000
             if ms > 30 { Logger.info { "[perf] MainPanel.update \(String(format: "%.1f", ms))ms cols=\(screenData.count)" } }
+            _perfSpan?.finish(["column_views": self.columns.count])
         }
         guard let contentView else { return }
 
@@ -153,9 +155,11 @@ class MainPanel: NSWindow {
 
     private func layoutColumns() {
         let _perfStart = DispatchTime.now()
+        let _perfSpan = PerfDebug.start("ui.mainPanel.layoutColumns", fields: ["columns": columns.count])
         defer {
             let ms = Double(DispatchTime.now().uptimeNanoseconds - _perfStart.uptimeNanoseconds) / 1_000_000
             if ms > 15 { Logger.info { "[perf] MainPanel.layoutColumns \(String(format: "%.1f", ms))ms cols=\(self.columns.count)" } }
+            _perfSpan?.finish(["column_views": self.columns.count])
         }
         guard let contentView, !columns.isEmpty else { return }
         let bounds = contentView.bounds
@@ -221,6 +225,7 @@ extension MainPanel: NSWindowDelegate {
         if elapsedMs > 250 {
             let count = Self.resizeCount
             Logger.info { "[perf] MainPanel windowDidResize fired \(count) times in \(String(format: "%.0f", elapsedMs))ms" }
+            PerfDebug.record("ui.mainPanel.windowDidResize.batch", fields: ["count": count, "elapsed_ms": elapsedMs])
             Self.resizeCount = 0
             Self.resizeWindowStartNs = nowNs
         }

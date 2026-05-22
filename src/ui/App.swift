@@ -274,7 +274,7 @@ class App: AppCenterApplication {
     }
 
     static func refreshOpenUiAfterExternalEvent(_ windowsToScreenshot: [Window], windowRemoved: Bool = false) {
-        SidePanelManager.shared.refreshPanels()
+        SidePanelManager.shared.refreshPanels(reason: "external_event")
         Windows.refreshThumbnailsAsync(windowsToScreenshot, .refreshUiAfterExternalEvent, windowRemoved: windowRemoved)
         refreshOpenUiThrottler.throttleOrProceed {
             guard appIsBeingUsed else { return }
@@ -434,6 +434,7 @@ extension App: NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         Logger.info { "" }
         makeSureAllCapturesAreFinished()
+        PerfDebug.shutdown()
         return .terminateNow
     }
 }

@@ -55,6 +55,7 @@ class AccessibilityEvents {
 
     private static func applicationActivated(_ app: Application, _ pid: pid_t, _ type: String, _ appFocusedWindow: AXUIElement?, _ wid: CGWindowID?) {
         Applications.frontmostPid = pid
+        SidePanelManager.shared.noteApplicationActivity(pid)
         if app.hasBeenActiveOnce != true {
             app.hasBeenActiveOnce = true
         }
@@ -75,6 +76,7 @@ class AccessibilityEvents {
 
     private static func applicationHiddenOrShown(_ app: Application, _ pid: pid_t, _ type: String) {
         app.isHidden = type == kAXApplicationHiddenNotification
+        Windows.markModelChanged()
         let windows = Windows.list.filter {
             // for AXUIElement of apps, CFEqual or == don't work; looks like a Cocoa bug
             return $0.application.pid == pid

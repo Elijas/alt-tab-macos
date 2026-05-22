@@ -18,6 +18,7 @@ class TabHierarchy {
     /// Main entry point: compute tab groups and group sort keys for the given window list.
     /// Called from Windows.updatesBeforeShowing() before sort().
     static func computeAndApply(_ windows: [Window]) {
+        let span = PerfDebug.start("tabHierarchy.computeAndApply", fields: ["windows": windows.count])
         let visibleWindowIds = visibleWindowIds(for: windows)
         let freshParentMap = queryAXTabGroups(windows, visibleWindowIds: visibleWindowIds)
         let parentMap = stableParentMap(freshParentMap, windows: windows, visibleWindowIds: visibleWindowIds)
@@ -30,6 +31,7 @@ class TabHierarchy {
             groupLastFocusKeys.removeAll()
             groupCreationKeys.removeAll()
         }
+        span?.finish(["visible_windows": visibleWindowIds.count, "fresh_parents": freshParentMap.count, "parents": parentMap.count, "changed": !parentMap.isEmpty])
     }
 
     static func stableParentMap(
@@ -119,29 +121,38 @@ class TabHierarchy {
     /// since that requires the CGS heuristic which the side panel path doesn't call.
     /// On title collision across tab groups, skip the ambiguous title rather than assigning it to the wrong parent.
     static func queryAXTabGroups(_ windows: [Window], visibleWindowIds providedVisibleWindowIds: Set<CGWindowID>? = nil) -> [CGWindowID: CGWindowID] {
+        let span = PerfDebug.start("tabHierarchy.queryAXTabGroups", fields: ["windows": windows.count, "provided_visible_ids": providedVisibleWindowIds != nil])
         var result = [CGWindowID: CGWindowID]()
         let visibleWindowIds = providedVisibleWindowIds ?? visibleWindowIds(for: windows)
         // forward map: "pid:title" → parentWids (from visible windows' AX tab groups)
         var titleToParents = [String: Set<CGWindowID>]()
         // collect which wids are "parent" windows (have an AXTabGroup)
         var parentWids = Set<CGWindowID>()
+        var visibleCandidates = 0
+        var childrenFetches = 0
+        var tabGroups = 0
+        var tabButtons = 0
         for window in windows {
             guard let axElement = window.axUiElement,
                   let wid = window.cgWindowId,
                   visibleWindowIds.contains(wid),
                   let childrenAttrs = try? axElement.attributes([kAXChildrenAttribute]),
                   let children = childrenAttrs.children else { continue }
+            visibleCandidates += 1
+            childrenFetches += 1
             for child in children {
                 guard let childRole = try? child.attributes([kAXRoleAttribute]),
                       childRole.role == "AXTabGroup",
                       let tgChildren = try? child.attributes([kAXChildrenAttribute]),
                       let tabs = tgChildren.children else { continue }
+                tabGroups += 1
                 parentWids.insert(wid)
                 for tab in tabs {
                     let keys = [kAXRoleAttribute, kAXSubroleAttribute, kAXTitleAttribute]
                     guard let tabAttrs = try? tab.attributes(keys),
                           tabAttrs.role == "AXRadioButton" || tabAttrs.subrole == "AXTabButton",
                           let title = tabAttrs.title, !title.isEmpty else { continue }
+                    tabButtons += 1
                     let key = "\(window.application.pid):\(title)"
                     titleToParents[key, default: []].insert(wid)
                 }
@@ -169,12 +180,14 @@ class TabHierarchy {
         let alreadyMapped = Set(result.keys).union(parentWids)
         // Index: PID → fullscreen visible windows (candidate parents)
         var fullscreenParentsByPid = [pid_t: [Window]]()
+        var fullscreenCandidates = 0
         for window in windows {
             guard let wid = window.cgWindowId,
                   !alreadyMapped.contains(wid),
                   !parentWids.contains(wid),
                   visibleWindowIds.contains(wid),
                   window.spaceIds.contains(where: { Spaces.isFullscreenSpace($0) }) else { continue }
+            fullscreenCandidates += 1
             fullscreenParentsByPid[window.application.pid, default: []].append(window)
         }
         if !fullscreenParentsByPid.isEmpty {
@@ -209,6 +222,7 @@ class TabHierarchy {
             }
         }
 
+        span?.finish(["visible_ids": visibleWindowIds.count, "visible_candidates": visibleCandidates, "children_fetches": childrenFetches, "tab_groups": tabGroups, "tab_buttons": tabButtons, "parent_windows": parentWids.count, "fullscreen_candidates": fullscreenCandidates, "mapped": result.count, "changed": !result.isEmpty])
         return result
     }
 
@@ -298,9 +312,15 @@ class TabHierarchy {
     }
 
     static func visibleWindowIds(in spaceIds: [CGSSpaceID]) -> Set<CGWindowID> {
+        let span = PerfDebug.start("tabHierarchy.visibleWindowIds", fields: ["spaces": Set(spaceIds).count])
         let spaceIds = Array(Set(spaceIds))
-        guard !spaceIds.isEmpty else { return [] }
-        return Set(Spaces.windowsInSpaces(spaceIds, false))
+        guard !spaceIds.isEmpty else {
+            span?.finish(["windows": 0])
+            return []
+        }
+        let result = Set(Spaces.windowsInSpaces(spaceIds, false))
+        span?.finish(["windows": result.count])
+        return result
     }
 
     private static func visibleWindowIds(for windows: [Window]) -> Set<CGWindowID> {
