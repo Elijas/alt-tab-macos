@@ -6,6 +6,12 @@ class Windows {
     static var selectedWindowTarget: String?
     static var hoveredWindowIndex: Int?
     private(set) static var modelVersion = 0
+    // Fork kill-switch: window-content capture (thumbnails/previews) is hard-disabled because
+    // continuous ScreenCaptureKit capture (SCShareableContent enumeration + SCScreenshotManager)
+    // was the single largest contributor to a system-wide freeze (~30k SC calls + ~1.2 GB RAM in
+    // ~10 min). Tiles fall back to app icon + title (TileView shows the icon when `thumbnail` is nil).
+    // Flip to `false` to fully restore thumbnails (also revert ScreenRecordingPermission.detect()).
+    static let windowContentCaptureDisabled = true
     private static var lastBackgroundThumbnailRequestNs = [CGWindowID: UInt64]()
     private static let backgroundThumbnailCooldownNs: UInt64 = 30_000_000_000
     // we use this to track if the focused window changed while alt-tab was open
@@ -129,6 +135,10 @@ class Windows {
     // dispatch screenshot requests off the main-thread, then wait for completion
     static func refreshThumbnailsAsync(_ windows: [Window], _ source: RefreshCausedBy, windowRemoved: Bool = false) {
         let requestSpan = PerfDebug.start("windows.refreshThumbnailsAsync", fields: ["requested_windows": windows.count, "source": String(describing: source), "window_removed": windowRemoved, "app_is_being_used": App.appIsBeingUsed])
+        if windowContentCaptureDisabled {
+            requestSpan?.finish(["eligible": false, "capture_disabled": true])
+            return
+        }
         guard (!windows.isEmpty || windowRemoved) && ScreenRecordingPermission.status == .granted
                && !Preferences.onlyShowApplications()
                && (!Appearance.hideThumbnails || Preferences.previewSelectedWindow)

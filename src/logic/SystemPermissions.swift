@@ -101,6 +101,12 @@ class ScreenRecordingPermission {
     }
 
     private static func detect() -> PermissionStatus {
+        // Window-content capture is disabled in this fork (Windows.windowContentCaptureDisabled), so the
+        // Screen Recording permission is unused. Report .granted so startup proceeds without invoking the
+        // SCShareableContent probe below — that probe is the last remaining ScreenCaptureKit call and it
+        // also triggers the macOS "Screen Recording" system prompt. Reporting .granted additionally
+        // suppresses the now-misleading "Thumbnails won't show" menubar callout (keyed off status != .granted).
+        if Windows.windowContentCaptureDisabled { return .granted }
         if #available(macOS 10.15, *) {
             return isGrantedOnSomeDisplay() ? .granted :
                 (Preferences.screenRecordingPermissionSkipped ? .skipped : .notGranted)
