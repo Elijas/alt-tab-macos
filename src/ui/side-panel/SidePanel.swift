@@ -15,6 +15,7 @@ class SidePanel: NSPanel {
     private let buttonBar = NSStackView()
     private var hideFifteenButton: NSButton!
     private var hideTwoMinutesButton: NSButton!
+    private var hideThirtyMinutesButton: NSButton!
     private var lrButton: NSButton!
     private var offButton: NSButton!
     private var buttonBarButtons: [NSButton] = []
@@ -68,11 +69,12 @@ class SidePanel: NSPanel {
 
         hideFifteenButton = makeButton(hideButtonTitle("15s"), #selector(hideFifteenSeconds))
         hideTwoMinutesButton = makeButton(hideButtonTitle("2m"), #selector(hideTwoMinutes))
+        hideThirtyMinutesButton = makeButton(hideButtonTitle("30m"), #selector(hideThirtyMinutes))
         let downButton = makeButton("▼", #selector(shiftOffsetDown))
         let upButton = makeButton("▲", #selector(shiftOffsetUp))
         lrButton = makeButton(Self.isLeftAligned ? "▶" : "◀", #selector(toggleLeftRight))
         offButton = makeButton(hideButtonTitle("∞"), #selector(turnOff))
-        buttonBarButtons = [downButton, upButton, lrButton, hideFifteenButton, hideTwoMinutesButton, offButton]
+        buttonBarButtons = [downButton, upButton, lrButton, hideFifteenButton, hideTwoMinutesButton, hideThirtyMinutesButton, offButton]
 
         // list view (shared row/separator layout)
         panelBody.addSubview(listView)
@@ -133,6 +135,7 @@ class SidePanel: NSPanel {
     func applyPlacementPreference() {
         hideFifteenButton.title = hideButtonTitle("15s")
         hideTwoMinutesButton.title = hideButtonTitle("2m")
+        hideThirtyMinutesButton.title = hideButtonTitle("30m")
         offButton.title = hideButtonTitle("∞")
         lrButton.title = Self.isLeftAligned ? "▶" : "◀"
         applyBodyAlignment()
@@ -190,6 +193,10 @@ class SidePanel: NSPanel {
 
     @objc private func hideTwoMinutes() {
         hide(for: 120)
+    }
+
+    @objc private func hideThirtyMinutes() {
+        hide(for: 1800)
     }
 
     private func hide(for seconds: TimeInterval) {
