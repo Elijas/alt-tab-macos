@@ -130,6 +130,15 @@ class SidePanel: NSPanel {
         applyButtonOrder()
     }
 
+    func applyPlacementPreference() {
+        hideFifteenButton.title = hideButtonTitle("15s")
+        hideTwoMinutesButton.title = hideButtonTitle("2m")
+        offButton.title = hideButtonTitle("∞")
+        lrButton.title = Self.isLeftAligned ? "▶" : "◀"
+        applyBodyAlignment()
+        applyCurrentWidth()
+    }
+
     private func applyButtonOrder() {
         let buttons = Self.isLeftAligned ? Array(buttonBarButtons.reversed()) : buttonBarButtons
         buttonBar.setViews(buttons, in: .leading)
@@ -206,13 +215,7 @@ class SidePanel: NSPanel {
     @objc private func toggleLeftRight() {
         Self.isLeftAligned.toggle()
         UserDefaults.standard.set(Self.isLeftAligned, forKey: Self.leftAlignedDefaultsKey)
-        hideFifteenButton.title = hideButtonTitle("15s")
-        hideTwoMinutesButton.title = hideButtonTitle("2m")
-        offButton.title = hideButtonTitle("∞")
-        lrButton.title = Self.isLeftAligned ? "▶" : "◀"
-        applyBodyAlignment()
-        applyCurrentWidth()
-        SidePanelManager.shared.refreshPanels()
+        SidePanelManager.shared.applyPlacementPreference()
     }
 
     private func adjustOffset(by delta: CGFloat) {

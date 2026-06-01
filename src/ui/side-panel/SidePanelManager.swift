@@ -91,6 +91,13 @@ class SidePanelManager {
         }
     }
 
+    func applyPlacementPreference() {
+        for (_, panel) in panels {
+            panel.applyPlacementPreference()
+        }
+        refreshPanels()
+    }
+
     func applySeparatorSizes() {
         separatorDebounce?.cancel()
         let work = DispatchWorkItem { [weak self] in
