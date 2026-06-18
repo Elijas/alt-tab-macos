@@ -234,21 +234,34 @@ class CliServer {
         Spaces.refresh()
 
         guard let mouseScreenId = NSScreen.withMouse()?.cachedUuid() else { return }
-        let visibleSpaceIds = Set(Spaces.visibleSpaces)
-
         let exceptions = ExceptionFilter.resolvedEntries(includeAltTabBuilds: true)
 
-        let candidates = tabGroupRepresentatives(Windows.list.filter { window in
+        // Cheap filters first (no IPC), so we only pay the per-window space/screen
+        // refresh below for windows that could plausibly be cycle candidates.
+        let eligible = Windows.list.filter { window in
             guard !window.isWindowlessApp else { return false }
+            guard !window.isMinimized else { return false }
+            guard !window.isHidden else { return false }
+            guard !ExceptionFilter.isExcluded(window, from: exceptions) else { return false }
+            return true
+        }
+
+        // Refresh each candidate's space/screen before matching on it. screenId is cached
+        // and only updated on AX move/resize/focus events, so a window that changed
+        // monitors can keep a stale screenId indefinitely and leak into another monitor's
+        // cycle (observed: a Chrome window bleeding across screens). Mirrors --detailed-list.
+        for window in eligible {
+            window.updateSpacesAndScreen()
+        }
+
+        let visibleSpaceIds = Set(Spaces.visibleSpaces)
+        let candidates = tabGroupRepresentatives(eligible.filter { window in
             // Same screen, or focused window with stale nil screenId
             let sameScreen = (window.screenId as String?) == (mouseScreenId as String)
                 || (window.screenId == nil && window.lastFocusOrder == 0)
             guard sameScreen else { return false }
             // On a currently visible space
             guard window.spaceIds.contains(where: { visibleSpaceIds.contains($0) }) else { return false }
-            guard !window.isMinimized else { return false }
-            guard !window.isHidden else { return false }
-            guard !ExceptionFilter.isExcluded(window, from: exceptions) else { return false }
             return true
         })
         .sorted { $0.creationOrder > $1.creationOrder }
