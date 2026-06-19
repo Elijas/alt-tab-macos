@@ -5,6 +5,14 @@ import AppCenterCrashes
 class AppCenterCrash: NSObject {
     static let secret = Bundle.main.object(forInfoDictionaryKey: "AppCenterSecret") as! String
 
+    // Local-time formatter matching app.log's timestamp format, so a logged crash time can be
+    // lined up by eye against the surrounding breadcrumbs.
+    static let crashDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = Logger.longDateTimeFormat
+        return formatter
+    }()
+
     override init() {
         super.init()
         // Enable catching uncaught exceptions thrown on the main thread
@@ -26,6 +34,7 @@ class AppCenterCrash: NSObject {
 
     // periphery:ignore
     func confirmationHandler(_ errorReports: [ErrorReport]) -> Bool {
+        logCrashReports(errorReports)
         initNecessaryFacilities()
         let shouldSend = checkIfShouldSend()
         BackgroundWork.startCrashReportsQueue()
@@ -35,6 +44,31 @@ class AppCenterCrash: NSObject {
             AppCenter.networkRequestsAllowed = false
         }
         return true
+    }
+
+    // Persist the previous session's crash details to app.log. Without this, crashes are routinely
+    // lost: macOS frequently writes no .ips file, AppCenter purges the PLCrashReporter .plcrash
+    // during this very processing pass (so it's already gone by the time the dialog appears), the
+    // AppCenterSecret is the placeholder "#APPCENTER_SECRET#" so reports never upload, and the
+    // on-disk AppCenter crash buffer is emptied too. app.log is the only durable sink that survives
+    // a Finder/Dock launch. exceptionName/exceptionReason pin NSException crashes (e.g. the known
+    // cross-thread Dictionary race: "unrecognized selector ... NSIndirectTaggedPointerString");
+    // appProcessIdentifier + appErrorTime locate the exact crashed session in app.log. Grep with
+    // "CRASH IN PREVIOUS SESSION".
+    func logCrashReports(_ errorReports: [ErrorReport]) {
+        for report in errorReports {
+            Logger.error {
+                "CRASH IN PREVIOUS SESSION"
+                    + " incidentId:\(report.incidentIdentifier ?? "?")"
+                    + " pid:\(report.appProcessIdentifier)"
+                    + " signal:\(report.signal ?? "?")"
+                    + " isAppKill:\(report.isAppKill)"
+                    + " exception:\(report.exceptionName ?? "<none>")"
+                    + " reason:\(report.exceptionReason ?? "<none>")"
+                    + " appStart:\(report.appStartTime.map { AppCenterCrash.crashDateFormatter.string(from: $0) } ?? "?")"
+                    + " appError:\(report.appErrorTime.map { AppCenterCrash.crashDateFormatter.string(from: $0) } ?? "?")"
+            }
+        }
     }
 
     func checkIfShouldSend() -> Bool {

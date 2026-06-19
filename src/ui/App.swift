@@ -405,9 +405,14 @@ class App: AppCenterApplication {
 
 extension App: NSApplicationDelegate {
     func applicationDidFinishLaunching(_ aNotification: Notification) {
+        // Logger must come first: AppCenterCrash() starts AppCenter's crash processing, whose
+        // confirmation callback logs the previous session's crash details (see AppCenterCrashes
+        // .logCrashReports). That callback can fire during/right after AppCenter.start — before
+        // app.log's FileDestination exists if Logger is initialized later — so the one durable
+        // crash breadcrumb would be dropped. Initializing the logger first guarantees capture.
+        Logger.initialize()
         App.appCenterDelegate = AppCenterCrash()
         App.shared.disableRelaunchOnLogin()
-        Logger.initialize()
         Logger.info { "Launching AltTab \(App.version)" }
         #if DEBUG
         UserDefaults.standard.set(true, forKey: "NSConstraintBasedLayoutVisualizeMutuallyExclusiveConstraints")
