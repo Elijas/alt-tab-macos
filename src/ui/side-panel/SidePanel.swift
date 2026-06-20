@@ -45,8 +45,10 @@ class SidePanel: NSPanel {
     private var panelBodyWidthConstraint: NSLayoutConstraint!
     private var panelBodyLeadingConstraint: NSLayoutConstraint!
     private var panelBodyTrailingConstraint: NSLayoutConstraint!
+    private var buttonBarHeightConstraint: NSLayoutConstraint!
     private var isMouseInside = false
     private var appliedEffectiveHover = false
+    private var lastContentHeight: CGFloat = 0
     private let screenUuidString: String?
     private var homeIsLeftAligned: Bool // persisted canonical side, set by the ◀/▶ button
     private var isLeftAligned: Bool // displayed side; hover-jump deviates this transiently
@@ -116,12 +118,13 @@ class SidePanel: NSPanel {
         panelBodyWidthConstraint = panelBody.widthAnchor.constraint(equalToConstant: currentWidth)
         panelBodyLeadingConstraint = panelBody.leadingAnchor.constraint(equalTo: panelRoot.leadingAnchor)
         panelBodyTrailingConstraint = panelBody.trailingAnchor.constraint(equalTo: panelRoot.trailingAnchor)
+        buttonBarHeightConstraint = buttonBar.heightAnchor.constraint(equalToConstant: Self.buttonBarHeight)
         NSLayoutConstraint.activate([
             panelBody.topAnchor.constraint(equalTo: panelRoot.topAnchor),
             panelBody.bottomAnchor.constraint(equalTo: panelRoot.bottomAnchor),
             panelBodyWidthConstraint,
 
-            listView.topAnchor.constraint(equalTo: panelBody.topAnchor, constant: 4),
+            listView.topAnchor.constraint(equalTo: panelBody.topAnchor), // flush top (matches flush bottom)
             listView.bottomAnchor.constraint(equalTo: buttonBar.topAnchor),
             listView.leadingAnchor.constraint(equalTo: panelBody.leadingAnchor),
             listView.trailingAnchor.constraint(equalTo: panelBody.trailingAnchor),
@@ -129,7 +132,7 @@ class SidePanel: NSPanel {
             buttonBar.bottomAnchor.constraint(equalTo: panelBody.bottomAnchor),
             buttonBar.leadingAnchor.constraint(equalTo: panelBody.leadingAnchor),
             buttonBar.trailingAnchor.constraint(equalTo: panelBody.trailingAnchor),
-            buttonBar.heightAnchor.constraint(equalToConstant: Self.buttonBarHeight),
+            buttonBarHeightConstraint,
         ])
         applyBodyAlignment()
 
@@ -218,6 +221,32 @@ class SidePanel: NSPanel {
         buttonBar.isHidden = !hovering
     }
 
+    /// Size and place the window. The TOP edge is anchored to where the full
+    /// (button-bar-inclusive) panel's top would be, so it never moves; only the BOTTOM
+    /// follows the actual height. When not hovering, the button bar collapses to 0 and
+    /// the bottom rises by its height — no blank reserved strip.
+    private func applyPanelGeometry() {
+        guard lastContentHeight > 0 else { return } // no content yet; updateContents() will place it
+        let hovering = effectiveHover
+        caTransaction {
+            buttonBarHeightConstraint.constant = hovering ? Self.buttonBarHeight : 0
+            let screenFrame = targetScreen.visibleFrame
+            // No top/bottom padding: content is flush to both edges; only the button bar
+            // adds height (and only while hovering).
+            let fullHeight = min(lastContentHeight + Self.buttonBarHeight, screenFrame.height * 0.8)
+            let buffer: CGFloat = 100
+            // slack = how far the center can move before an edge hits the buffer zone
+            let slack = max((screenFrame.height - fullHeight) / 2 - buffer, 0)
+            let clampedOffset = min(max(Self.yOffset, -slack), slack)
+            let topY = screenFrame.midY + fullHeight / 2 + clampedOffset // stable across the bar toggle
+            let height = hovering ? fullHeight : max(fullHeight - Self.buttonBarHeight, 0)
+            let width = SidePanelRow.panelWidth
+            let x = isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
+            setFrameIfNeeded(CGRect(x: x, y: topY - height, width: width, height: height), display: false)
+            panelRoot.layoutSubtreeIfNeeded()
+        }
+    }
+
     func syncHover(at location: NSPoint) {
         let containsMouse = frame.contains(location)
         // "Hover jump": entering the panel without holding ⇧ flips it to the other
@@ -238,6 +267,7 @@ class SidePanel: NSPanel {
             appliedEffectiveHover = hovering
             applyHoverState()
             applyCurrentWidth()
+            applyPanelGeometry() // grow/collapse the button-bar strip, top edge anchored
         }
         listView.syncHover(at: hovering ? location : nil)
     }
@@ -372,19 +402,8 @@ class SidePanel: NSPanel {
             applyHoverState()
             listView.showTabHierarchy = showTabHierarchy
             listView.applyIconsOnly(usesCompactLayout)
-            let contentHeight = listView.updateContents(groups, selectedWindowId: selectedWindowId, isActiveScreen: isActiveScreen, currentSpaceGroupIndex: currentSpaceGroupIndex)
-
-            // reposition panel (clamp offset so panel edges stay on screen with buffer)
-            let screenFrame = targetScreen.visibleFrame
-            let panelHeight = min(contentHeight + 8 + Self.buttonBarHeight, screenFrame.height * 0.8)
-            let buffer: CGFloat = 100
-            // slack = how far the center can move before an edge hits the buffer zone
-            let slack = max((screenFrame.height - panelHeight) / 2 - buffer, 0)
-            let clampedOffset = min(max(Self.yOffset, -slack), slack)
-            let width = SidePanelRow.panelWidth
-            let x = isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
-            let y = screenFrame.midY - panelHeight / 2 + clampedOffset
-            setFrameIfNeeded(CGRect(x: x, y: y, width: width, height: panelHeight), display: false)
+            lastContentHeight = listView.updateContents(groups, selectedWindowId: selectedWindowId, isActiveScreen: isActiveScreen, currentSpaceGroupIndex: currentSpaceGroupIndex)
+            applyPanelGeometry()
             syncHover(at: NSEvent.mouseLocation)
         }
     }

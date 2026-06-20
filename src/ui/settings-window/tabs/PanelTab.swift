@@ -101,8 +101,9 @@ class PanelTab {
         let sideSepSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelSeparatorSize", 0, 20, 0, false, "px", width: 140, extraAction: separatorAction)
         let sideFontSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelFontSize", 9, 30, 0, false, "pt", width: 140, extraAction: sidePanelRebuildAction)
         let compactWidthSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelCompactWidth", 30, 260, 0, false, "px", width: 140, extraAction: rowColorAction)
-        let compactLettersSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelCompactLetters", 0, 30, 0, false, "", width: 140, extraAction: rowColorAction)
-        let compactLettersIndentedSlider = LabelAndControl.makeLabelWithSlider("", "sidePanelCompactLettersIndented", 0, 30, 0, false, "", width: 140, extraAction: rowColorAction)
+        let letterStep: (Double) -> Double = { $0 < 30 ? 1 : 5 }
+        let compactLettersSlider = makeLogSlider("sidePanelCompactLetters", min: 1, max: 100, zeroLabel: "0", step: letterStep, extraAction: rowColorAction)
+        let compactLettersIndentedSlider = makeLogSlider("sidePanelCompactLettersIndented", min: 1, max: 100, zeroLabel: "0", step: letterStep, extraAction: rowColorAction)
 
         let sideTable = TableGroupView(title: "Side Panel", width: SettingsWindow.contentWidth)
         sideTable.addRow(enable)
@@ -111,8 +112,8 @@ class PanelTab {
         sideTable.addRow(leftText: "Space separator", rightViews: [sideSepSlider[1], sideSepSlider[2]])
         sideTable.addRow(leftText: "Font size", rightViews: [sideFontSlider[1], sideFontSlider[2]])
         sideTable.addRow(leftText: "Compact width", rightViews: [compactWidthSlider[1], compactWidthSlider[2]])
-        sideTable.addRow(leftText: "Compact letters", rightViews: [compactLettersSlider[1], compactLettersSlider[2]])
-        sideTable.addRow(leftText: "Compact letters (indented items)", rightViews: [compactLettersIndentedSlider[1], compactLettersIndentedSlider[2]])
+        sideTable.addRow(leftText: "Compact letters", rightViews: compactLettersSlider)
+        sideTable.addRow(leftText: "Compact letters (indented items)", rightViews: compactLettersIndentedSlider)
 
         let tabHierarchySwitch = LabelAndControl.makeSwitch("showTabHierarchyInSidePanel", extraAction: { _ in
             SidePanelManager.shared.refreshPanels()
@@ -128,9 +129,12 @@ class PanelTab {
         let hoverJumpSwitch = LabelAndControl.makeSwitch("sidePanelHoverJump")
         sideTable.addRow(leftText: "Hover jumps to other side (hold ⇧ to click)", rightViews: [hoverJumpSwitch])
 
-        // Read live when a hover-jump schedules its return timer, so no extraAction is needed.
-        let returnDelaySlider = LabelAndControl.makeLabelWithSlider("", "sidePanelReturnDelay", 0, 300, 0, false, "s", width: 140)
-        sideTable.addRow(leftText: "Return to home side after (0 = off)", rightViews: [returnDelaySlider[1], returnDelaySlider[2]])
+        // Logarithmic: fine control at the low end (5→10s matters), coarse at the high
+        // end (250→255s doesn't). Far-left = off. Stores plain seconds, read live when a
+        // hover-jump schedules its return timer, so no extraAction is needed.
+        sideTable.addRow(leftText: "Return to home side after",
+            rightViews: makeLogSlider("sidePanelReturnDelay", min: 5, max: 300, zeroLabel: "off", unit: "s",
+                step: { $0 < 30 ? 1 : ($0 < 120 ? 5 : 15) }))
 
         // "Main Panel" group
         let openButton = NSButton(title: "Open", target: nil, action: nil)
@@ -168,5 +172,50 @@ class PanelTab {
         windowTable.addRow(leftText: "Show tabs as indented items", rightViews: [windowTabSwitch])
 
         return TableGroupSetView(originalViews: [commonTable, sideTable, windowTable], bottomPadding: 0)
+    }
+
+    // MARK: - Logarithmic slider
+
+    /// A slider whose thumb position is normalized 0…1 but maps exponentially to the
+    /// value range [min, max] — so equal pixels are equal ratios (fine control at the
+    /// low end, coarse at the high end). The leftmost band is reserved for 0 (shown as
+    /// `zeroLabel`). The stored pref stays plain integers; `step` snaps to tidy values.
+    /// Returns [slider, suffixLabel] ready for TableGroupView.addRow(rightViews:).
+    private static func makeLogSlider(_ key: String, min minValue: Double, max maxValue: Double,
+                                      zeroLabel: String, unit: String = "", offZone: Double = 0.04,
+                                      step: @escaping (Double) -> Double,
+                                      extraAction: ActionClosure? = nil) -> [NSView] {
+        func value(forPosition p: Double) -> Int {
+            guard p >= offZone else { return 0 } // inclusive so the minimum is reachable
+            let t = (p - offZone) / (1 - offZone)
+            let raw = minValue * pow(maxValue / minValue, t)
+            let s = step(raw)
+            return Int((raw / s).rounded()) * Int(s)
+        }
+        func position(forValue v: Int) -> Double {
+            guard v > 0 else { return 0 }
+            let clamped = Swift.min(Swift.max(Double(v), minValue), maxValue)
+            let t = log(clamped / minValue) / log(maxValue / minValue)
+            return offZone + t * (1 - offZone)
+        }
+        func suffixText(_ v: Int) -> String { v <= 0 ? zeroLabel : "\(v)\(unit)" }
+
+        let current = CachedUserDefaults.int(key)
+        let suffix = NSTextField(labelWithString: suffixText(current))
+        suffix.textColor = .gray
+        let slider = NSSlider()
+        slider.minValue = 0
+        slider.maxValue = 1
+        slider.doubleValue = position(forValue: current)
+        slider.isContinuous = true
+        slider.translatesAutoresizingMaskIntoConstraints = false
+        slider.addOrUpdateConstraint(slider.widthAnchor, 140)
+        slider.onAction = { control in
+            let v = value(forPosition: (control as! NSSlider).doubleValue)
+            Preferences.set(key, String(v))
+            suffix.stringValue = suffixText(v)
+            extraAction?(control)
+        }
+        return [slider, suffix]
     }
 }
