@@ -128,6 +128,10 @@ class PanelTab {
         let hoverJumpSwitch = LabelAndControl.makeSwitch("sidePanelHoverJump")
         sideTable.addRow(leftText: "Hover jumps to other side (hold ⇧ to click)", rightViews: [hoverJumpSwitch])
 
+        // Read live when a hover-jump schedules its return timer, so no extraAction is needed.
+        let returnDelaySlider = LabelAndControl.makeLabelWithSlider("", "sidePanelReturnDelay", 0, 300, 0, false, "s", width: 140)
+        sideTable.addRow(leftText: "Return to home side after (0 = off)", rightViews: [returnDelaySlider[1], returnDelaySlider[2]])
+
         // "Main Panel" group
         let openButton = NSButton(title: "Open", target: nil, action: nil)
         openButton.bezelStyle = .rounded

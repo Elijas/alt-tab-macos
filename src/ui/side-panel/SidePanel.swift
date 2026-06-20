@@ -46,9 +46,12 @@ class SidePanel: NSPanel {
     private var panelBodyLeadingConstraint: NSLayoutConstraint!
     private var panelBodyTrailingConstraint: NSLayoutConstraint!
     private var isMouseInside = false
+    private var appliedEffectiveHover = false
     private let screenUuidString: String?
-    private var isLeftAligned: Bool
+    private var homeIsLeftAligned: Bool // persisted canonical side, set by the ◀/▶ button
+    private var isLeftAligned: Bool // displayed side; hover-jump deviates this transiently
     private var isJumpPending = false
+    private var returnWorkItem: DispatchWorkItem?
 
     private static var yOffset: CGFloat = {
         let defaults = UserDefaults.standard
@@ -58,8 +61,10 @@ class SidePanel: NSPanel {
     init(for screen: NSScreen) {
         self.targetScreen = screen
         let uuid = screen.cachedUuid().map { $0 as String }
+        let home = SidePanel.loadLeftAligned(for: uuid)
         self.screenUuidString = uuid
-        self.isLeftAligned = SidePanel.loadLeftAligned(for: uuid)
+        self.homeIsLeftAligned = home
+        self.isLeftAligned = home
         super.init(contentRect: .zero, styleMask: .nonactivatingPanel, backing: .buffered, defer: false)
         isFloatingPanel = true
         hidesOnDeactivate = false
@@ -141,8 +146,21 @@ class SidePanel: NSPanel {
         syncHover(at: NSEvent.mouseLocation)
     }
 
+    // While hover-jump is armed, an un-modified hover is "get out of the way", not
+    // "interact" — so it should ONLY trigger the jump, with no hover affordances.
+    // Holding ⇧ means "I want this panel", which both suppresses the jump and
+    // re-enables the full hover (expansion, hover opacity, button bar, row color).
+    private var hoverSuppressed: Bool {
+        Preferences.sidePanelHoverJump && !NSEvent.modifierFlags.contains(.shift)
+    }
+
+    // The single predicate every hover visual is gated on.
+    private var effectiveHover: Bool {
+        isMouseInside && !hoverSuppressed
+    }
+
     private var usesCompactLayout: Bool {
-        !isMouseInside
+        !effectiveHover
     }
 
     private var currentWidth: CGFloat {
@@ -167,8 +185,26 @@ class SidePanel: NSPanel {
         hideThirtyMinutesButton.title = hideButtonTitle("30m")
         offButton.title = hideButtonTitle("∞")
         lrButton.title = isLeftAligned ? "▶" : "◀"
-        applyBodyAlignment()
-        applyCurrentWidth()
+        // Re-align the body AND move the window to the target screen edge in one
+        // transaction. Otherwise the body shifts within the window now and the window
+        // frame only catches up on the throttled refresh ~200ms later — a two-step jump.
+        caTransaction {
+            applyBodyAlignment()
+            applyCurrentWidth()
+            repositionForAlignment()
+        }
+    }
+
+    /// Snap only the window's x (width is constant) to the side `isLeftAligned` implies,
+    /// keeping the current y/height. The next refresh recomputes height but won't move x.
+    private func repositionForAlignment() {
+        guard frame.height > 0 else { return } // not placed yet; updateContents() will do it
+        let width = SidePanelRow.panelWidth
+        let screenFrame = targetScreen.visibleFrame
+        var newFrame = frame
+        newFrame.size.width = width
+        newFrame.origin.x = isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
+        setFrameIfNeeded(newFrame, display: true)
     }
 
     private func applyButtonOrder() {
@@ -177,38 +213,73 @@ class SidePanel: NSPanel {
     }
 
     private func applyHoverState() {
-        alphaValue = CGFloat(isMouseInside ? Preferences.sidePanelHoverOpacity : Preferences.sidePanelOpacity) / 100
-        buttonBar.isHidden = !isMouseInside
+        let hovering = effectiveHover
+        alphaValue = CGFloat(hovering ? Preferences.sidePanelHoverOpacity : Preferences.sidePanelOpacity) / 100
+        buttonBar.isHidden = !hovering
     }
 
     func syncHover(at location: NSPoint) {
         let containsMouse = frame.contains(location)
-        if isMouseInside != containsMouse {
-            isMouseInside = containsMouse
-            // "Hover jump": entering the panel without holding ⇧ flips it to the
-            // other side, so the cursor is left behind and you can't click — unless
-            // you hold ⇧, which suppresses the jump and lets the click land.
-            if containsMouse, Preferences.sidePanelHoverJump,
-               !NSEvent.modifierFlags.contains(.shift), !isJumpPending {
-                scheduleHoverJump()
-                return
-            }
+        // "Hover jump": entering the panel without holding ⇧ flips it to the other
+        // side, leaving the cursor behind so you can't click — unless you hold ⇧,
+        // which suppresses the jump and lets the click (and the hover visuals) land.
+        if containsMouse, !isMouseInside, Preferences.sidePanelHoverJump,
+           !NSEvent.modifierFlags.contains(.shift), !isJumpPending {
+            isMouseInside = true
+            scheduleHoverJump()
+            return
+        }
+        isMouseInside = containsMouse
+        // All hover visuals (expansion, opacity, button bar, row color) follow the
+        // same effectiveHover predicate, so an un-modified hover-jump shows none of
+        // them. Re-apply the layout pieces only when that effective state changes.
+        let hovering = effectiveHover
+        if appliedEffectiveHover != hovering {
+            appliedEffectiveHover = hovering
             applyHoverState()
             applyCurrentWidth()
         }
-        listView.syncHover(at: containsMouse ? location : nil)
+        listView.syncHover(at: hovering ? location : nil)
     }
 
     private func scheduleHoverJump() {
         // Defer to the next runloop tick: syncHover() is driven from a loop over all
-        // panels in SidePanelManager, and flipAlignment() re-enters that path via
+        // panels in SidePanelManager, and hoverJump() re-enters that path via
         // applyPlacementPreference()/refreshPanels(). Async breaks the re-entrancy.
         isJumpPending = true
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.isJumpPending = false
-            self.flipAlignment()
+            self.hoverJump()
         }
+    }
+
+    private func hoverJump() {
+        // Transient, display-only flip away from home (NOT persisted). The panel
+        // returns to its home side on its own after sidePanelReturnDelay seconds.
+        isLeftAligned.toggle()
+        SidePanelManager.shared.applyPlacementPreference()
+        scheduleAutoReturn()
+    }
+
+    private func scheduleAutoReturn() {
+        cancelAutoReturn()
+        let delaySeconds = Preferences.sidePanelReturnDelay
+        // 0 = feature off; also nothing to do if the display already matches home.
+        guard delaySeconds > 0, isLeftAligned != homeIsLeftAligned else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.returnWorkItem = nil
+            self.isLeftAligned = self.homeIsLeftAligned
+            SidePanelManager.shared.applyPlacementPreference()
+        }
+        returnWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + Double(delaySeconds), execute: work)
+    }
+
+    private func cancelAutoReturn() {
+        returnWorkItem?.cancel()
+        returnWorkItem = nil
     }
 
     private func setFrameIfNeeded(_ newFrame: NSRect, display: Bool) {
@@ -269,14 +340,13 @@ class SidePanel: NSPanel {
     }
 
     @objc private func toggleLeftRight() {
-        flipAlignment()
-    }
-
-    /// Flip this panel's side only (per-monitor). Persists to the per-screen map and
-    /// re-lays-out all panels; only this panel's stored state changed, so only it moves.
-    private func flipAlignment() {
-        isLeftAligned.toggle()
-        SidePanel.saveLeftAligned(isLeftAligned, for: screenUuidString)
+        // The ◀/▶ button sets this monitor's HOME side (persisted, per-monitor).
+        // Display follows immediately and any pending auto-return is cancelled, since
+        // there is no longer a deviation to return from.
+        homeIsLeftAligned.toggle()
+        isLeftAligned = homeIsLeftAligned
+        SidePanel.saveLeftAligned(homeIsLeftAligned, for: screenUuidString)
+        cancelAutoReturn()
         SidePanelManager.shared.applyPlacementPreference()
     }
 
