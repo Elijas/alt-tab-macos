@@ -67,6 +67,34 @@ class PanelTab {
             rowColorAction(sender)
         }
 
+        let minimizedLightWell = NSColorWell()
+        minimizedLightWell.color = NSColor(hex: Preferences.minimizedColorLight)
+        minimizedLightWell.onAction = { sender in
+            Preferences.set("minimizedColorLight", (sender as! NSColorWell).color.hexString)
+            rowColorAction(sender)
+        }
+
+        let minimizedDarkWell = NSColorWell()
+        minimizedDarkWell.color = NSColor(hex: Preferences.minimizedColorDark)
+        minimizedDarkWell.onAction = { sender in
+            Preferences.set("minimizedColorDark", (sender as! NSColorWell).color.hexString)
+            rowColorAction(sender)
+        }
+
+        let hiddenLightWell = NSColorWell()
+        hiddenLightWell.color = NSColor(hex: Preferences.hiddenColorLight)
+        hiddenLightWell.onAction = { sender in
+            Preferences.set("hiddenColorLight", (sender as! NSColorWell).color.hexString)
+            rowColorAction(sender)
+        }
+
+        let hiddenDarkWell = NSColorWell()
+        hiddenDarkWell.color = NSColor(hex: Preferences.hiddenColorDark)
+        hiddenDarkWell.onAction = { sender in
+            Preferences.set("hiddenColorDark", (sender as! NSColorWell).color.hexString)
+            rowColorAction(sender)
+        }
+
         let commonTable = TableGroupView(title: "Common", width: SettingsWindow.contentWidth)
         commonTable.addRow(leftText: "Separator color (light)", rightViews: [lightColorWell])
         commonTable.addRow(leftText: "Separator color (dark)", rightViews: [darkColorWell])
@@ -76,6 +104,10 @@ class PanelTab {
         commonTable.addRow(leftText: "Selected row color (dark)", rightViews: [selectedDarkWell])
         commonTable.addRow(leftText: "Hover row color (light)", rightViews: [hoverLightWell])
         commonTable.addRow(leftText: "Hover row color (dark)", rightViews: [hoverDarkWell])
+        commonTable.addRow(leftText: "Minimized row color (light)", rightViews: [minimizedLightWell])
+        commonTable.addRow(leftText: "Minimized row color (dark)", rightViews: [minimizedDarkWell])
+        commonTable.addRow(leftText: "Hidden-app row color (light)", rightViews: [hiddenLightWell])
+        commonTable.addRow(leftText: "Hidden-app row color (dark)", rightViews: [hiddenDarkWell])
 
         // "Side Panel" group
         let enableSwitch = LabelAndControl.makeSwitch("sidePanelEnabled", extraAction: { _ in

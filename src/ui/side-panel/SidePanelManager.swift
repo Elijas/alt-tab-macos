@@ -456,11 +456,12 @@ class SidePanelManager {
                 let isVisible = visibleOnSpace.contains(wid)
                 if let window = windowByCgId[wid] {
                     let isTab = showTabs && tabParentMap[wid] != nil && !visibleWindowIds.contains(wid)
+                    // Keep minimized and app-hidden windows: shown "parked" on the space CGS
+                    // still associates them with. They're not "visible" but must not be dropped.
+                    let isParked = window.isMinimized || window.isHidden
                     let dominated = seen.contains(wid)
                         || window.isWindowlessApp
-                        || window.isMinimized
-                        || window.isHidden
-                        || (!isVisible && !isTab)
+                        || (!isVisible && !isTab && !isParked)
                         || self.isExcluded(window)
                         || panelWindowNumbers.contains(Int(wid))
                     if !dominated {
@@ -483,6 +484,11 @@ class SidePanelManager {
                 }
             }
             var sorted = group.sorted { w0, w1 in
+                // visible (0) on top, then minimized (1), then app-hidden (2) at the bottom.
+                // Matches the color precedence: a minimized+hidden window ranks as minimized.
+                let r0 = w0.isMinimized ? 1 : (w0.isHidden ? 2 : 0)
+                let r1 = w1.isMinimized ? 1 : (w1.isHidden ? 2 : 0)
+                if r0 != r1 { return r0 < r1 }
                 let k0 = w0.cgWindowId.flatMap { groupCreationKeys[$0] } ?? w0.creationOrder
                 let k1 = w1.cgWindowId.flatMap { groupCreationKeys[$0] } ?? w1.creationOrder
                 if k0 != k1 { return k0 > k1 }

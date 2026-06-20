@@ -29,6 +29,8 @@ class SidePanelRow: NSView {
     private var trackingArea: NSTrackingArea?
     private var highlightState = HighlightState.none
     private var isHovered = false
+    private var isMinimized = false
+    private var isAppHidden = false
     private var fullTitle: String = ""
     private(set) var isIndented = false
     private(set) var isEmpty = false
@@ -81,11 +83,20 @@ class SidePanelRow: NSView {
         titleLabel.stringValue = fullTitle
         titleLabel.textColor = .labelColor
         self.highlightState = highlightState
+        self.isMinimized = window.isMinimized
+        self.isAppHidden = window.isHidden
         self.isIndented = isIndented
         applyIndent()
         updateBackground()
         onClick = { [weak window] in
             guard let window else { return }
+            // Restore a parked window. unhide is app-level and main-thread synchronous,
+            // so doing it before focus() is race-free (focus()'s SLPS work is enqueued on
+            // the concurrent ax queue and only runs after). deminiaturize is handled by
+            // focus() itself, as in the main switcher.
+            if window.application.isHidden {
+                window.application.runningApplication.unhide()
+            }
             window.focus()
             if Windows.updateLastFocusOrder(window) != nil {
                 SidePanelManager.shared.refreshPanels()
@@ -103,6 +114,8 @@ class SidePanelRow: NSView {
         titleLabel.stringValue = fullTitle
         titleLabel.textColor = .secondaryLabelColor
         self.highlightState = highlightState
+        self.isMinimized = false
+        self.isAppHidden = false
         self.isIndented = false
         applyIndent()
         updateBackground()
@@ -142,6 +155,14 @@ class SidePanelRow: NSView {
         if isHovered {
             let hex = isDark ? Preferences.hoverColorDark : Preferences.hoverColorLight
             layer?.backgroundColor = NSColor(hex: hex).cgColor
+        } else if isMinimized {
+            // Minimized (per-window) wins over app-hidden (per-app, coarser) and over
+            // active/selected: a parked window reads as parked, most-specific state first.
+            let hex = isDark ? Preferences.minimizedColorDark : Preferences.minimizedColorLight
+            layer?.backgroundColor = NSColor(hex: hex).withAlphaComponent(0.6).cgColor
+        } else if isAppHidden {
+            let hex = isDark ? Preferences.hiddenColorDark : Preferences.hiddenColorLight
+            layer?.backgroundColor = NSColor(hex: hex).withAlphaComponent(0.6).cgColor
         } else {
             switch highlightState {
             case .active:

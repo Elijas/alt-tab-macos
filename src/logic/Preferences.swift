@@ -75,6 +75,10 @@ class Preferences {
             "selectedColorDark": "A0A0A0",
             "hoverColorLight": "007AFF",
             "hoverColorDark": "0A84FF",
+            "minimizedColorLight": "CC8A33",
+            "minimizedColorDark": "B3792B",
+            "hiddenColorLight": "663399",
+            "hiddenColorDark": "8A5CD0",
             "sidePanelCompactWidth": "90",
             "sidePanelCompactLetters": "5",
             "sidePanelCompactLettersIndented": "0",
@@ -172,6 +176,10 @@ class Preferences {
     static var selectedColorDark: String { CachedUserDefaults.string("selectedColorDark") }
     static var hoverColorLight: String { CachedUserDefaults.string("hoverColorLight") }
     static var hoverColorDark: String { CachedUserDefaults.string("hoverColorDark") }
+    static var minimizedColorLight: String { CachedUserDefaults.string("minimizedColorLight") }
+    static var minimizedColorDark: String { CachedUserDefaults.string("minimizedColorDark") }
+    static var hiddenColorLight: String { CachedUserDefaults.string("hiddenColorLight") }
+    static var hiddenColorDark: String { CachedUserDefaults.string("hiddenColorDark") }
     static var sidePanelCompactWidth: Int { CachedUserDefaults.int("sidePanelCompactWidth") }
     static var sidePanelCompactLetters: Int { CachedUserDefaults.int("sidePanelCompactLetters") }
     static var sidePanelCompactLettersIndented: Int { CachedUserDefaults.int("sidePanelCompactLettersIndented") }
