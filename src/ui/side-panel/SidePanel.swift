@@ -4,9 +4,32 @@ class SidePanel: NSPanel {
     private static let buttonBarHeight: CGFloat = 28
     private static let offsetStep: CGFloat = 100
     private static let offsetDefaultsKey = "sidePanelYOffset"
-    private static let leftAlignedDefaultsKey = "sidePanelLeftAligned"
+    private static let leftAlignedDefaultsKey = "sidePanelLeftAligned" // legacy global default (pre per-screen)
+    private static let leftAlignedScreensKey = "sidePanelLeftAlignedScreens" // JSON [screenUuid: Bool], per-monitor
 
-    private static var isLeftAligned: Bool = UserDefaults.standard.bool(forKey: leftAlignedDefaultsKey)
+    // Per-screen left/right alignment, persisted as a JSON map keyed by screen UUID.
+    // Falls back to the legacy global default so existing installs keep their current side.
+    private static func leftAlignedMap() -> [String: Bool] {
+        guard let raw = UserDefaults.standard.string(forKey: leftAlignedScreensKey),
+              let data = raw.data(using: .utf8),
+              let map = try? JSONDecoder().decode([String: Bool].self, from: data) else { return [:] }
+        return map
+    }
+
+    private static func loadLeftAligned(for uuid: String?) -> Bool {
+        let legacyDefault = UserDefaults.standard.bool(forKey: leftAlignedDefaultsKey)
+        guard let uuid else { return legacyDefault }
+        return leftAlignedMap()[uuid] ?? legacyDefault
+    }
+
+    private static func saveLeftAligned(_ value: Bool, for uuid: String?) {
+        guard let uuid else { return }
+        var map = leftAlignedMap()
+        map[uuid] = value
+        if let data = try? JSONEncoder().encode(map), let str = String(data: data, encoding: .utf8) {
+            UserDefaults.standard.set(str, forKey: leftAlignedScreensKey)
+        }
+    }
 
     private let listView = WindowListView(separatorHeight: CGFloat(Preferences.sidePanelSeparatorSize), fontSize: CGFloat(Preferences.sidePanelFontSize), minWidth: SidePanelRow.panelWidth)
     let targetScreen: NSScreen
@@ -23,6 +46,9 @@ class SidePanel: NSPanel {
     private var panelBodyLeadingConstraint: NSLayoutConstraint!
     private var panelBodyTrailingConstraint: NSLayoutConstraint!
     private var isMouseInside = false
+    private let screenUuidString: String?
+    private var isLeftAligned: Bool
+    private var isJumpPending = false
 
     private static var yOffset: CGFloat = {
         let defaults = UserDefaults.standard
@@ -31,6 +57,9 @@ class SidePanel: NSPanel {
 
     init(for screen: NSScreen) {
         self.targetScreen = screen
+        let uuid = screen.cachedUuid().map { $0 as String }
+        self.screenUuidString = uuid
+        self.isLeftAligned = SidePanel.loadLeftAligned(for: uuid)
         super.init(contentRect: .zero, styleMask: .nonactivatingPanel, backing: .buffered, defer: false)
         isFloatingPanel = true
         hidesOnDeactivate = false
@@ -72,7 +101,7 @@ class SidePanel: NSPanel {
         hideThirtyMinutesButton = makeButton(hideButtonTitle("30m"), #selector(hideThirtyMinutes))
         let downButton = makeButton("▼", #selector(shiftOffsetDown))
         let upButton = makeButton("▲", #selector(shiftOffsetUp))
-        lrButton = makeButton(Self.isLeftAligned ? "▶" : "◀", #selector(toggleLeftRight))
+        lrButton = makeButton(isLeftAligned ? "▶" : "◀", #selector(toggleLeftRight))
         offButton = makeButton(hideButtonTitle("∞"), #selector(turnOff))
         buttonBarButtons = [downButton, upButton, lrButton, hideFifteenButton, hideTwoMinutesButton, hideThirtyMinutesButton, offButton]
 
@@ -127,8 +156,8 @@ class SidePanel: NSPanel {
     }
 
     private func applyBodyAlignment() {
-        panelBodyLeadingConstraint.isActive = Self.isLeftAligned
-        panelBodyTrailingConstraint.isActive = !Self.isLeftAligned
+        panelBodyLeadingConstraint.isActive = isLeftAligned
+        panelBodyTrailingConstraint.isActive = !isLeftAligned
         applyButtonOrder()
     }
 
@@ -137,13 +166,13 @@ class SidePanel: NSPanel {
         hideTwoMinutesButton.title = hideButtonTitle("2m")
         hideThirtyMinutesButton.title = hideButtonTitle("30m")
         offButton.title = hideButtonTitle("∞")
-        lrButton.title = Self.isLeftAligned ? "▶" : "◀"
+        lrButton.title = isLeftAligned ? "▶" : "◀"
         applyBodyAlignment()
         applyCurrentWidth()
     }
 
     private func applyButtonOrder() {
-        let buttons = Self.isLeftAligned ? Array(buttonBarButtons.reversed()) : buttonBarButtons
+        let buttons = isLeftAligned ? Array(buttonBarButtons.reversed()) : buttonBarButtons
         buttonBar.setViews(buttons, in: .leading)
     }
 
@@ -156,10 +185,30 @@ class SidePanel: NSPanel {
         let containsMouse = frame.contains(location)
         if isMouseInside != containsMouse {
             isMouseInside = containsMouse
+            // "Hover jump": entering the panel without holding ⇧ flips it to the
+            // other side, so the cursor is left behind and you can't click — unless
+            // you hold ⇧, which suppresses the jump and lets the click land.
+            if containsMouse, Preferences.sidePanelHoverJump,
+               !NSEvent.modifierFlags.contains(.shift), !isJumpPending {
+                scheduleHoverJump()
+                return
+            }
             applyHoverState()
             applyCurrentWidth()
         }
         listView.syncHover(at: containsMouse ? location : nil)
+    }
+
+    private func scheduleHoverJump() {
+        // Defer to the next runloop tick: syncHover() is driven from a loop over all
+        // panels in SidePanelManager, and flipAlignment() re-enters that path via
+        // applyPlacementPreference()/refreshPanels(). Async breaks the re-entrancy.
+        isJumpPending = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            self.isJumpPending = false
+            self.flipAlignment()
+        }
     }
 
     private func setFrameIfNeeded(_ newFrame: NSRect, display: Bool) {
@@ -184,7 +233,7 @@ class SidePanel: NSPanel {
     }
 
     private func hideButtonTitle(_ duration: String) -> String {
-        Self.isLeftAligned ? "◀ \(duration)" : "\(duration) ▶"
+        isLeftAligned ? "◀ \(duration)" : "\(duration) ▶"
     }
 
     @objc private func hideFifteenSeconds() {
@@ -220,8 +269,14 @@ class SidePanel: NSPanel {
     }
 
     @objc private func toggleLeftRight() {
-        Self.isLeftAligned.toggle()
-        UserDefaults.standard.set(Self.isLeftAligned, forKey: Self.leftAlignedDefaultsKey)
+        flipAlignment()
+    }
+
+    /// Flip this panel's side only (per-monitor). Persists to the per-screen map and
+    /// re-lays-out all panels; only this panel's stored state changed, so only it moves.
+    private func flipAlignment() {
+        isLeftAligned.toggle()
+        SidePanel.saveLeftAligned(isLeftAligned, for: screenUuidString)
         SidePanelManager.shared.applyPlacementPreference()
     }
 
@@ -257,7 +312,7 @@ class SidePanel: NSPanel {
             let slack = max((screenFrame.height - panelHeight) / 2 - buffer, 0)
             let clampedOffset = min(max(Self.yOffset, -slack), slack)
             let width = SidePanelRow.panelWidth
-            let x = Self.isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
+            let x = isLeftAligned ? screenFrame.minX : screenFrame.maxX - width
             let y = screenFrame.midY - panelHeight / 2 + clampedOffset
             setFrameIfNeeded(CGRect(x: x, y: y, width: width, height: panelHeight), display: false)
             syncHover(at: NSEvent.mouseLocation)

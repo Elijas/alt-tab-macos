@@ -124,6 +124,10 @@ class PanelTab {
         })
         sideTable.addRow(leftText: "Group tabs in sort order", rightViews: [groupSortSwitch])
 
+        // Read live by SidePanel.syncHover on every hover, so no extraAction is needed.
+        let hoverJumpSwitch = LabelAndControl.makeSwitch("sidePanelHoverJump")
+        sideTable.addRow(leftText: "Hover jumps to other side (hold ⇧ to click)", rightViews: [hoverJumpSwitch])
+
         // "Main Panel" group
         let openButton = NSButton(title: "Open", target: nil, action: nil)
         openButton.bezelStyle = .rounded

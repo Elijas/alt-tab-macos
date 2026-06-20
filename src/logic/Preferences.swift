@@ -65,6 +65,7 @@ class Preferences {
             "showTabHierarchyInMainPanel": "false",
             "showTabHierarchyInSidePanel": "false",
             "groupTabsInSortOrder": "true",
+            "sidePanelHoverJump": "false",
             "separatorColorLight": "999999",
             "separatorColorDark": "666666",
             "activeColorLight": "007AFF",
@@ -160,6 +161,7 @@ class Preferences {
     static var showTabHierarchyInMainPanel: Bool { CachedUserDefaults.bool("showTabHierarchyInMainPanel") }
     static var showTabHierarchyInSidePanel: Bool { CachedUserDefaults.bool("showTabHierarchyInSidePanel") }
     static var groupTabsInSortOrder: Bool { CachedUserDefaults.bool("groupTabsInSortOrder") }
+    static var sidePanelHoverJump: Bool { CachedUserDefaults.bool("sidePanelHoverJump") }
     static var separatorColorLight: String { CachedUserDefaults.string("separatorColorLight") }
     static var separatorColorDark: String { CachedUserDefaults.string("separatorColorDark") }
     static var activeColorLight: String { CachedUserDefaults.string("activeColorLight") }
