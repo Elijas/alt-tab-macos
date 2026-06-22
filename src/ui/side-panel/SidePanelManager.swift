@@ -692,6 +692,12 @@ class SidePanelManager {
                   let pid = info.ownerPID(),
                   let layer = info.layer() else { continue }
 
+            // skip our own process: our panel windows appear in CGWindowList instantly, but they are never
+            // alt-tab targets. The panelWindowNumbers exclusion below is by window-number against a snapshot
+            // that is racy while panels are mid-creation, so a freshly-created panel wid can leak through and
+            // schedule a brute-force AX self-scan that crashes (see Applications.manuallyUpdateWindows).
+            if pid == ProcessInfo.processInfo.processIdentifier { continue }
+
             // only normal-layer windows
             guard layer == 0 else { continue }
             normalWindows += 1

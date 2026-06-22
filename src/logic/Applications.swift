@@ -50,6 +50,14 @@ class Applications {
     }
 
     static func manuallyUpdateWindows(_ app: Application) {
+        // Never AX-discover our OWN process. AltTab's own windows (Main Panel / side panels) are never
+        // alt-tab targets, so there is nothing to find. Critically, allWindows() below runs kAXWindows +
+        // brute-force (windowsByBruteForce) AX queries on a background AXCallScheduler thread; for OTHER
+        // apps those are serviced cross-process (safe off-main), but for our OWN pid they are serviced
+        // in-process by AppKit, which is main-thread-only. Querying our half-built panel windows off the
+        // main thread trips an AppKit/WindowManagement assertion (SIGTRAP/TRAP_BRKPT) — this is the
+        // "opening the all-screen overview crashed the app" bug. See ~/Library/Logs/at004/preserved-crash-080649.
+        guard app.pid != ProcessInfo.processInfo.processIdentifier else { return }
         PerfDebug.record("applications.manuallyUpdateWindows.request", fields: ["pid": Int(app.pid), "app": app.localizedName ?? app.bundleIdentifier ?? app.debugId])
         AXCallScheduler.shared.schedule(key: "pid-\(app.pid)", context: app.debugId, pid: app.pid) { [weak app] in
             guard let app, let axUiElement = app.axUiElement else { return }
