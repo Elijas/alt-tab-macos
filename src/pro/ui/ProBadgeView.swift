@@ -256,6 +256,9 @@ class ProBadgeView: NSView {
     /// Only valid for the LAST segment — the badge anchors to the control's trailing edge.
     @discardableResult
     static func attach(to segmentedControl: NSSegmentedControl, segmentIndex: Int, label: String, symbol: Symbols) -> SegmentOverlay {
+        guard ProPolicy.enforcesGates else {
+            return SegmentOverlay(badge: ProBadgeView(), icon: NSImageView(), label: NSTextField(labelWithString: ""))
+        }
         let selected = segmentedControl.selectedSegment == segmentIndex
         segmentedControl.setLabel("", forSegment: segmentIndex)
         segmentedControl.setImage(nil, forSegment: segmentIndex)
@@ -338,6 +341,7 @@ class ProBadgeView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        isHidden = !ProPolicy.enforcesGates
         // Register the "Pro" tag with the search index if a section build is in progress —
         // mirrors what the post-construction walk in `SettingsWindow.collectSearchContent` does
         // when it spots a `ProBadgeView`, just without needing the walk to find it after.
@@ -432,6 +436,7 @@ class ProBadgeView: NSView {
 
     private func updateColors() {
         onWindowKeyChanged?()
+        guard ProPolicy.enforcesGates else { return }
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         if isSelectedState && isWindowKey {

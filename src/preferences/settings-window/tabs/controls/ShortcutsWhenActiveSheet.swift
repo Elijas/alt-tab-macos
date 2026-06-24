@@ -61,6 +61,7 @@ class ShortcutsWhenActiveSheet: SheetWindow {
     }
 
     private func addProBadgeToLeftLabel(_ rowInfo: TableGroupView.RowInfo) {
+        guard ProPolicy.enforcesGates else { return }
         guard let label = rowInfo.leftViews?.first as? NSTextField else { return }
         let badge = ProBadgeView()
         label.superview?.addSubview(badge)

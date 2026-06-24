@@ -59,12 +59,15 @@ class LicenseManager {
         return Self.lifetimeVariants.contains(variant)
     }
 
-    var isProAvailable: Bool { state.isProAvailable }
+    // Fork override: at004 is license-agnostic; upstream subscription state must not disable fork features.
+    var isProAvailable: Bool { !ProPolicy.enforcesGates || state.isProAvailable }
 
     /// Pro features are locked out as soon as the license is no longer valid. Degradable Pro
     /// preferences are downgraded to their Free equivalents immediately via
     /// `ProTransitionManager.onProLockEngaged()`, wired to the state-change hook in App.swift.
     var isProLocked: Bool {
+        // Fork override: keep at004 out of upstream downgrade paths that would break custom shortcut slots.
+        guard ProPolicy.enforcesGates else { return false }
         switch state {
         case .pro, .trial: return false
         case .proExpired, .trialExpired: return true

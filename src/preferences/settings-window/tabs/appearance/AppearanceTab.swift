@@ -686,6 +686,7 @@ class AppearanceTab: NSObject {
     }
 
     static func addProBadgesToStyleButtons(_ stackView: NSStackView) {
+        guard ProPolicy.enforcesGates else { return }
         for (index, view) in stackView.arrangedSubviews.enumerated() {
             guard index > 0, let buttonView = view as? ImageTextButtonView else { continue }
             let badge = ProBadgeView()

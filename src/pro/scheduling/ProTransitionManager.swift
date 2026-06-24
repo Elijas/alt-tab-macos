@@ -159,16 +159,20 @@ class ProTransitionManager {
     var hasTriggeredPostExpirationSwitcher: Bool { get { state.hasTriggeredPostExpirationSwitcher } set { state.hasTriggeredPostExpirationSwitcher = newValue } }
 
     var shouldShowBadgeDot: Bool {
-        ProTransitionManagerTestable.shouldShowBadgeDot(currentState())
+        guard ProPolicy.enforcesGates else { return false }
+        return ProTransitionManagerTestable.shouldShowBadgeDot(currentState())
     }
 
     // MARK: - Lifecycle
 
     func onAppLaunchComplete() {
+        // Fork override: upstream Pro lifecycle prompts are intentionally disabled for at004.
+        guard ProPolicy.enforcesGates else { return }
         scheduler.onAppLaunchComplete()
     }
 
     func onLicenseStateChanged() {
+        guard ProPolicy.enforcesGates else { return }
         if case .pro = LicenseManager.shared.state {
             scheduler.cancel()
             emit(.dismissAllProWindows)
@@ -203,6 +207,7 @@ class ProTransitionManager {
     /// Called from App.showUiOrCycleSelection() at the start of a fresh switcher session (not on cycle).
     /// Decides whether to queue a Day 4 tour or a post-expiration free-pass + [C] for after dismissal.
     func onSwitcherShown() {
+        guard ProPolicy.enforcesGates else { return }
         let action = ProTransitionManagerTestable.evaluateSwitcherOpen(currentState())
         switch action {
         case .showDay4Tour:
@@ -224,6 +229,7 @@ class ProTransitionManager {
 
     /// Returns true if the feature should be allowed to execute
     func attemptHardGatedFeature(_ feature: ProFeature) -> Bool {
+        guard ProPolicy.enforcesGates else { return true }
         let action = ProTransitionManagerTestable.evaluateHardGate(currentState())
         switch action {
         case .allow: return true

@@ -206,6 +206,7 @@ class App: AppCenterApplication {
     /// "now" for the Welcome prompt. Kept narrow on purpose: the other Day-X prompts are gated by
     /// trial age and don't fire on the very first launch.
     private static func willShowDay1WelcomeOnAppLaunch() -> Bool {
+        guard ProPolicy.enforcesGates else { return false }
         if case .pro = LicenseManager.shared.state { return false }
         return !ProTransitionManager.shared.hasSeenWelcome
     }

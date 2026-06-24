@@ -1,3 +1,11 @@
+import Foundation
+
+enum ProPolicy {
+    // Fork policy: at004 keeps upstream Pro/subscription gates disabled so custom shortcuts and settings remain usable.
+    // Keep this override when merging upstream license changes into the fork.
+    static let enforcesGates = Bundle.main.bundleIdentifier != "com.lwouis.alt-tab-macos.at004"
+}
+
 enum LicenseState: Equatable {
     case trial(daysRemaining: Int)
     case pro
