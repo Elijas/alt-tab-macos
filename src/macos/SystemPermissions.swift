@@ -142,7 +142,7 @@ class ScreenRecordingPermission {
         // SCShareableContent probe below — that probe is the last remaining ScreenCaptureKit call and it
         // also triggers the macOS "Screen Recording" system prompt. Reporting .granted additionally
         // suppresses the now-misleading "Thumbnails won't show" menubar callout (keyed off status != .granted).
-        if Windows.windowContentCaptureDisabled { return .granted }
+        if WindowThumbnails.windowContentCaptureDisabled { return .granted }
         if #available(macOS 10.15, *) {
             // The user opted out of the prompt (#5548), so we must not call isGrantedOnSomeDisplay()
             // here — it shows the system prompt when ungranted. But probing silently with the

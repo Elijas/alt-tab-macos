@@ -35,14 +35,14 @@ class Window {
     var icon: CGImage? { get { application.icon } }
     var shouldShowTheUser = true
     var tabbedSiblingWids: [CGWindowID]?
-    var isTabChild: Bool { parentWindowId != 0 }
+    var isTabChild: Bool { state.parentWindowId != 0 }
     var tabGroupKey: CGWindowID? {
         if let siblingWids = tabbedSiblingWids, !siblingWids.isEmpty {
             var groupWids = Set(siblingWids)
             if let wid = cgWindowId { groupWids.insert(wid) }
             return groupWids.min()
         }
-        if parentWindowId != 0 { return parentWindowId }
+        if state.parentWindowId != 0 { return state.parentWindowId }
         return cgWindowId
     }
     var isHidden: Bool { get { application.isHidden } }
@@ -335,14 +335,14 @@ class Window {
     private func focusSnapshot() -> FocusSnapshot? {
         guard let targetCgWindowId = cgWindowId, let targetAxElement = axUiElement else { return nil }
         let originSpaceId = Spaces.currentSpaceId
-        let targetOnCurrentSpace = spaceIds.contains(originSpaceId)
+        let targetOnCurrentSpace = self.spaceIds.contains(originSpaceId)
         let originFrontPid = targetOnCurrentSpace ? nil : NSWorkspace.shared.frontmostApplication?.processIdentifier
         return FocusSnapshot(pid: application.pid, targetCgWindowId: targetCgWindowId, targetAxElement: targetAxElement, originSpaceId: originSpaceId, originFrontPid: originFrontPid, tab: tabFocusSnapshot())
     }
 
     private func tabFocusSnapshot() -> TabFocusSnapshot? {
         guard isTabChild,
-              let parentWindow = Windows.list.first(where: { $0.cgWindowId == parentWindowId }),
+              let parentWindow = Windows.list.first(where: { $0.cgWindowId == self.parentWindowId }),
               let parentCgWindowId = parentWindow.cgWindowId else { return nil }
         return TabFocusSnapshot(parentCgWindowId: parentCgWindowId, parentSpaceIds: parentWindow.spaceIds, parentAxElement: parentWindow.axUiElement)
     }

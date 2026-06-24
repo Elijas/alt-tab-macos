@@ -553,7 +553,7 @@ class SidePanelManager {
                     hash = hash &* 31 &+ Int(window.cgWindowId ?? 0)
                     hash = hash &* 31 &+ window.lastFocusOrder
                     hash = hash &* 31 &+ Int(window.parentWindowId)
-                    hash = hash &* 31 &+ (window.title?.hashValue ?? 0)
+                    hash = hash &* 31 &+ window.title.hashValue
                     hash = hash &* 31 &+ (window.isHidden ? 1 : 0)
                     hash = hash &* 31 &+ (window.isMinimized ? 1 : 0)
                     hash = hash &* 31 &+ (window.isFullscreen ? 1 : 0)

@@ -681,8 +681,8 @@ enum ExceptionFilter {
         case .always: return true
         case .whenNoOpenWindow: return window.isWindowlessApp
         case .windowTitleContains:
-            guard let titleFilter = entry.windowTitleContains, !titleFilter.isEmpty else { return false }
-            return window.title.contains(titleFilter)
+            guard let titleFilters = entry.windowTitleContains, !titleFilters.isEmpty else { return false }
+            return titleFilters.contains { !$0.isEmpty && window.title.contains($0) }
         }
     }
 }

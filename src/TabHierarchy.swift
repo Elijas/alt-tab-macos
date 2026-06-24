@@ -164,7 +164,7 @@ class TabHierarchy {
             guard let wid = window.cgWindowId,
                   !parentWids.contains(wid),
                   !visibleWindowIds.contains(wid) else { continue }
-            let title = window.title ?? ""
+            let title = window.title
             guard !title.isEmpty else { continue }
             let key = "\(window.application.pid):\(title)"
             if let parentWids = titleToParents[key],

@@ -30,6 +30,7 @@ enum LogLevel: Int, Comparable {
 
 class Logger {
     static let flag = "--logs="
+    static let longDateTimeFormat = "yyyy-MM-dd HH:mm:ss.SSS"
     static var minLevel: LogLevel = .error
     private static var tap: ((LogLevel, String) -> Void)?
     private static let ansiReset = "\u{001B}[0m"
@@ -287,7 +288,7 @@ class PerfDebug {
             BackgroundWork.permissionsCheckOnTimerQueue,
             BackgroundWork.permissionsSystemCallsQueue,
             BackgroundWork.repeatingKeyQueue,
-        ]
+        ].compactMap { $0 }
         return Dictionary(uniqueKeysWithValues: queues.map { queue in
             let executing = queue.operations.reduce(0) { $0 + ($1.isExecuting ? 1 : 0) }
             return (queue.underlyingQueue?.label ?? "unknown", ["queued": queue.operationCount, "executing": executing, "callbacks": queue.activeCallbacks])

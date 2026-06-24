@@ -78,7 +78,7 @@ class SidePanelRow: NSView {
             iconLayer.contents = nil
         }
         let appName = window.application.localizedName ?? ""
-        let windowTitle = window.title ?? ""
+        let windowTitle = window.title
         fullTitle = windowTitle.isEmpty ? appName : windowTitle
         titleLabel.stringValue = fullTitle
         titleLabel.textColor = .labelColor
