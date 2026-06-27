@@ -300,7 +300,7 @@ class SettingsWindow: NSWindow {
     private let rightScrollView = NSScrollView()
     private let sectionsDocumentView = SettingsFlippedView(frame: .zero)
     private let sectionsStack = NSStackView()
-    private let upgradeButton = UpgradeButton()
+    private let upgradeButton: UpgradeButton? = ProPolicy.enforcesGates ? UpgradeButton() : nil
     private let quitButton = NSButton(title: String(format: NSLocalizedString("Quit %@", comment: "%@ is AltTab"), App.name), target: nil, action: #selector(NSApplication.terminate(_:)))
     private var sections = [SettingsSection]()
     private var visibleSections = [SettingsSection]()
@@ -488,6 +488,7 @@ class SettingsWindow: NSWindow {
         sidebarScrollView.documentView = sidebarTableView
         sidebarScrollView.translatesAutoresizingMaskIntoConstraints = false
         parent.addSubview(sidebarScrollView)
+        let bottomAnchor = upgradeButton?.topAnchor ?? quitButton.topAnchor
         NSLayoutConstraint.activate([
             sidebarScrollView.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 12),
             // The scroll view sits flush to the sidebar edges. The `.sourceList` selection style
@@ -497,11 +498,12 @@ class SettingsWindow: NSWindow {
             // too far in.
             sidebarScrollView.leadingAnchor.constraint(equalTo: parent.leadingAnchor),
             sidebarScrollView.trailingAnchor.constraint(equalTo: parent.trailingAnchor),
-            sidebarScrollView.bottomAnchor.constraint(equalTo: upgradeButton.topAnchor, constant: -10),
+            sidebarScrollView.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
         ])
     }
 
     private func setupUpgradeButton(_ parent: NSView) {
+        guard let upgradeButton else { return }
         upgradeButton.target = self
         upgradeButton.action = #selector(upgradeButtonClicked)
         upgradeButton.translatesAutoresizingMaskIntoConstraints = false
@@ -520,6 +522,7 @@ class SettingsWindow: NSWindow {
     }
 
     @objc private func upgradeButtonClicked() {
+        guard ProPolicy.enforcesGates else { return }
         showUpgradeView()
     }
 
@@ -1118,6 +1121,7 @@ class SettingsWindow: NSWindow {
     }
 
     func showUpgradeView() {
+        guard ProPolicy.enforcesGates else { return }
         guard !isShowingUpgradeView else { return }
         isShowingUpgradeView = true
         sidebarTableView.deselectAll(nil)
@@ -1159,7 +1163,7 @@ class SettingsWindow: NSWindow {
     }
 
     func refreshUpgradeButton() {
-        upgradeButton.refreshTitle()
+        upgradeButton?.refreshTitle()
     }
 
     private func selectSection(_ section: SettingsSection, scroll: Bool, selectInSidebar: Bool = true) {
@@ -1248,7 +1252,7 @@ extension SettingsWindow: NSWindowDelegate {
         guard !hasPlayedShine else { return }
         hasPlayedShine = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            self?.upgradeButton.playShineAnimation()
+            self?.upgradeButton?.playShineAnimation()
         }
     }
 

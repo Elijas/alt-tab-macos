@@ -5,9 +5,9 @@ class Menubar {
     static var menu: NSMenu!
     static var permissionCalloutMenuItems: [NSMenuItem]?
     private static var permissionCallout: PermissionCallout?
-    private static var upgradeToProMenuItem: NSMenuItem!
-    private static var supportProjectMenuItem: NSMenuItem!
-    private static var myAccountMenuItem: NSMenuItem!
+    private static var upgradeToProMenuItem: NSMenuItem?
+    private static var supportProjectMenuItem: NSMenuItem?
+    private static var myAccountMenuItem: NSMenuItem?
     private static let menuDelegate = MenubarMenuDelegate()
     private static var isVisibleObserver: NSKeyValueObservation?
 
@@ -46,9 +46,11 @@ class Menubar {
         addMenuItem(String(format: NSLocalizedString("About %@", comment: "Menubar option. %@ is AltTab"), App.name), #selector(App.showAboutWindow), "", "info.circle", nil, App.self)
         addMenuItem(NSLocalizedString("Debug tools", comment: "Menubar option"), #selector(App.showDebugWindow), "", "scope", nil, App.self)
         addMenuItem(NSLocalizedString("Send feedback…", comment: "Menubar option"), #selector(App.showFeedbackPanel), "", "text.bubble", nil, App.self)
-        upgradeToProMenuItem = addMenuItem(NSLocalizedString("Get Pro", comment: "Menubar option"), App.upgradeToProAction, "", "star.fill", nil, App.self)
-        upgradeToProMenuItem.view = UpgradeMenuItemView()
-        myAccountMenuItem = addMenuItem(NSLocalizedString("My Account", comment: ""), App.openAccountAction, "", "person.crop.circle", nil, App.self)
+        if ProPolicy.enforcesGates {
+            upgradeToProMenuItem = addMenuItem(NSLocalizedString("Get Pro", comment: "Menubar option"), App.upgradeToProAction, "", "star.fill", nil, App.self)
+            upgradeToProMenuItem?.view = UpgradeMenuItemView()
+            myAccountMenuItem = addMenuItem(NSLocalizedString("My Account", comment: ""), App.openAccountAction, "", "person.crop.circle", nil, App.self)
+        }
         supportProjectMenuItem = addMenuItem(NSLocalizedString("Support this project", comment: "Menubar option"), App.supportProjectAction, "", "heart.fill", .red, App.self)
         refreshLicenseMenuItems()
         menu.addItem(NSMenuItem.separator())
@@ -85,7 +87,13 @@ class Menubar {
     #endif
 
     static func refreshLicenseMenuItems() {
-        guard upgradeToProMenuItem != nil else { return }
+        guard let supportProjectMenuItem else { return }
+        guard ProPolicy.enforcesGates, let myAccountMenuItem else {
+            toggleUpgradeMenuItem(false)
+            Self.myAccountMenuItem?.isHidden = true
+            supportProjectMenuItem.isHidden = false
+            return
+        }
         let state = LicenseManager.shared.state
         switch state {
         case .trial:
@@ -106,14 +114,13 @@ class Menubar {
             myAccountMenuItem.isHidden = true
         }
         if case .pro = state { return }
-        (upgradeToProMenuItem.view as? UpgradeMenuItemView)?.updateContent(state)
+        (upgradeToProMenuItem?.view as? UpgradeMenuItemView)?.updateContent(state)
     }
 
     private static func toggleUpgradeMenuItem(_ show: Bool) {
+        guard let upgradeToProMenuItem, let supportProjectMenuItem else { return }
         if show && !menu.items.contains(upgradeToProMenuItem) {
-            if let i = menu.items.firstIndex(of: supportProjectMenuItem) {
-                menu.insertItem(upgradeToProMenuItem, at: i)
-            }
+            if let i = menu.items.firstIndex(of: supportProjectMenuItem) { menu.insertItem(upgradeToProMenuItem, at: i) }
         }
         if !show && menu.items.contains(upgradeToProMenuItem) {
             menu.removeItem(upgradeToProMenuItem)
