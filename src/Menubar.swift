@@ -422,7 +422,7 @@ class PanelMenu: NSObject {
     private let toggles: [Toggle] = [
         Toggle(title: "Side Panel: Show Tabs as Indented Items", key: "showTabHierarchyInSidePanel", apply: { SidePanelManager.shared.refreshPanels() }),
         Toggle(title: "Side Panel: Group Tabs in Sort Order", key: "groupTabsInSortOrder", apply: { SidePanelManager.shared.refreshPanels() }),
-        Toggle(title: "Side Panel: Hover Jumps to Other Side", key: "sidePanelHoverJump", apply: {}),
+        Toggle(title: "Side Panel: Hover Moves Instead of Hiding", key: "sidePanelHoverJump", apply: {}),
         Toggle(title: "Main Panel: Open on Startup", key: "mainPanelOpenOnStartup", apply: {}),
         Toggle(title: "Main Panel: Wrap Titles", key: "mainPanelTitleWrapping", apply: { SidePanelManager.shared.applySeparatorSizes() }),
         Toggle(title: "Main Panel: Stretch Rows to Fill Space", key: "mainPanelVerticalFill", apply: { SidePanelManager.shared.applySeparatorSizes() }),

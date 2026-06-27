@@ -53,6 +53,7 @@ class SidePanel: NSPanel {
     private var homeIsLeftAligned: Bool // persisted canonical side, set by the ◀/▶ button
     private var isLeftAligned: Bool // displayed side; hover-jump deviates this transiently
     private var isJumpPending = false
+    private var isHiddenUntilMouseLeaves = false
     private var returnWorkItem: DispatchWorkItem?
 
     private static var yOffset: CGFloat = {
@@ -149,13 +150,11 @@ class SidePanel: NSPanel {
         syncHover(at: NSEvent.mouseLocation)
     }
 
-    // While hover-jump is armed, an un-modified hover is "get out of the way", not
-    // "interact" — so it should ONLY trigger the jump, with no hover affordances.
-    // Holding ⇧ means "I want this panel", which both suppresses the jump and
-    // re-enables the full hover (expansion, hover opacity, button bar, row color).
-    private var hoverSuppressed: Bool {
-        Preferences.sidePanelHoverJump && !NSEvent.modifierFlags.contains(.shift)
-    }
+    // Unmodified hover avoids the panel: it jumps if the switch is on, hides if off.
+    // Holding ⌘ means "I want this panel" and re-enables the full hover UI.
+    private var isHoverBypassActive: Bool { NSEvent.modifierFlags.contains(.command) }
+
+    private var hoverSuppressed: Bool { Preferences.sidePanelHoverJump && !isHoverBypassActive }
 
     // The single predicate every hover visual is gated on.
     private var effectiveHover: Bool {
@@ -248,20 +247,40 @@ class SidePanel: NSPanel {
     }
 
     func syncHover(at location: NSPoint) {
+        guard !shouldStayHidden(at: location) else { return }
         let containsMouse = frame.contains(location)
-        // "Hover jump": entering the panel without holding ⇧ flips it to the other
-        // side, leaving the cursor behind so you can't click — unless you hold ⇧,
-        // which suppresses the jump and lets the click (and the hover visuals) land.
-        if containsMouse, !isMouseInside, Preferences.sidePanelHoverJump,
-           !NSEvent.modifierFlags.contains(.shift), !isJumpPending {
+        if containsMouse, !isMouseInside, !isHoverBypassActive, !isJumpPending {
             isMouseInside = true
-            scheduleHoverJump()
+            if Preferences.sidePanelHoverJump {
+                scheduleHoverJump()
+            } else {
+                hideUntilMouseLeaves()
+            }
             return
         }
         isMouseInside = containsMouse
-        // All hover visuals (expansion, opacity, button bar, row color) follow the
-        // same effectiveHover predicate, so an un-modified hover-jump shows none of
-        // them. Re-apply the layout pieces only when that effective state changes.
+        syncHoverVisuals(at: location)
+    }
+
+    private func shouldStayHidden(at location: NSPoint) -> Bool {
+        guard isHiddenUntilMouseLeaves else { return false }
+        guard frame.contains(location), !isHoverBypassActive else {
+            isHiddenUntilMouseLeaves = false
+            orderFront(nil)
+            return false
+        }
+        return true
+    }
+
+    private func hideUntilMouseLeaves() {
+        isMouseInside = false
+        isHiddenUntilMouseLeaves = true
+        syncHoverVisuals(at: NSEvent.mouseLocation)
+        orderOut(nil)
+    }
+
+    private func syncHoverVisuals(at location: NSPoint) {
+        // All hover visuals follow effectiveHover, so unmodified avoidance shows none.
         let hovering = effectiveHover
         if appliedEffectiveHover != hovering {
             appliedEffectiveHover = hovering

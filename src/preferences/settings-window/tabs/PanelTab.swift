@@ -159,7 +159,7 @@ class PanelTab {
 
         // Read live by SidePanel.syncHover on every hover, so no extraAction is needed.
         let hoverJumpSwitch = LabelAndControl.makeSwitch("sidePanelHoverJump")
-        sideTable.addRow(leftText: "Hover jumps to other side (hold ⇧ to click)", rightViews: [hoverJumpSwitch])
+        sideTable.addRow(leftText: "Hover moves instead of hiding (hold ⌘ to click)", rightViews: [hoverJumpSwitch])
 
         // Logarithmic: fine control at the low end (5→10s matters), coarse at the high
         // end (250→255s doesn't). Far-left = off. Stores plain seconds, read live when a
