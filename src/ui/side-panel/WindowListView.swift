@@ -37,7 +37,9 @@ private class SpaceHeaderLabel: NSView {
         self.displayIndex = displayIndex
         titleLabel.font = NSFont.systemFont(ofSize: fontSize, weight: .medium)
         titleLabel.stringValue = Preferences.spaceLabel(for: spaceId, displayIndex: displayIndex)
-        layer?.backgroundColor = WindowListView.separatorColor().cgColor
+        let background = WindowListView.separatorColor()
+        titleLabel.textColor = background.hsvAwareTextColor
+        layer?.backgroundColor = background.cgColor
     }
 
     func desiredHeight(forWidth width: CGFloat, baseHeight: CGFloat) -> CGFloat {
@@ -422,5 +424,16 @@ class WindowListView: NSView {
         sep.wantsLayer = true
         sep.layer?.backgroundColor = WindowListView.separatorColor().cgColor
         return sep
+    }
+}
+
+private extension NSColor {
+    var hsvAwareTextColor: NSColor {
+        guard let rgb = usingColorSpace(.sRGB) else { return .labelColor }
+        var saturation: CGFloat = 0
+        var brightness: CGFloat = 0
+        rgb.getHue(nil, saturation: &saturation, brightness: &brightness, alpha: nil)
+        let luminance = 0.2126 * rgb.redComponent + 0.7152 * rgb.greenComponent + 0.0722 * rgb.blueComponent
+        return brightness < 0.55 || luminance < 0.5 || (saturation > 0.45 && luminance < 0.62) ? .white : .black
     }
 }
