@@ -17,6 +17,7 @@ class App: AppCenterApplication {
     static let licence = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String ?? ""
     static let repository = "https://github.com/lwouis/alt-tab-macos"
     static let appIconReps = CGImage.allNamed("app.icns")
+    static let updatesEnabled = false
 
     static func appIcon(for size: NSSize) -> CGImage {
         let scale = NSScreen.main?.backingScaleFactor ?? 2.0
@@ -103,6 +104,7 @@ class App: AppCenterApplication {
     }
 
     @objc static func checkForUpdatesNow(_ sender: NSMenuItem) {
+        guard updatesEnabled else { return }
         GeneralTab.checkForUpdatesNow(sender)
     }
 
@@ -412,14 +414,7 @@ class App: AppCenterApplication {
         CursorEvents.observe()
         TrackpadEvents.observe()
         CliEvents.observe()
-        App.sparkleDelegate = SparkleDelegate()
-        App.updaterController = SPUStandardUpdaterController(
-            startingUpdater: false,
-            updaterDelegate: App.sparkleDelegate!,
-            userDriverDelegate: nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
-            App.updaterController?.startUpdater()
-        }
+        configureUpdaterIfNeeded()
         PreferencesEvents.initialize()
         BenchmarkRunner.startIfNeeded()
         showSettingsWindowOnFirstLaunchIfNeeded()
@@ -437,6 +432,13 @@ class App: AppCenterApplication {
         ProTransitionManager.shared.onAction = { ProPromptHost.shared.dispatch($0) }
         ProTransitionManager.shared.onAppLaunchComplete()
         Logger.info { "Finished launching AltTab" }
+    }
+
+    private static func configureUpdaterIfNeeded() {
+        guard updatesEnabled else { return }
+        App.sparkleDelegate = SparkleDelegate()
+        App.updaterController = SPUStandardUpdaterController(startingUpdater: false, updaterDelegate: App.sparkleDelegate!, userDriverDelegate: nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30) { App.updaterController?.startUpdater() }
     }
 }
 

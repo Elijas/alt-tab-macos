@@ -1,5 +1,4 @@
 import Cocoa
-import Sparkle
 
 class UserDefaultsEvents: NSObject {
     private static var policyObserver = UserDefaultsEvents()
