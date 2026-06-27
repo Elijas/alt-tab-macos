@@ -4,6 +4,7 @@ import AppCenterCrashes
 
 class AppCenterCrash: NSObject {
     static let secret = Secrets.appCenterSecret
+    private static var hasSecret: Bool { !secret.isEmpty && secret != "#APPCENTER_SECRET#" }
 
     // Local-time formatter matching app.log's timestamp format, so a logged crash time can be
     // lined up by eye against the surrounding breadcrumbs.
@@ -15,6 +16,7 @@ class AppCenterCrash: NSObject {
 
     override init() {
         super.init()
+        guard Self.hasSecret else { return }
         // Enable catching uncaught exceptions thrown on the main thread
         UserDefaults.standard.register(defaults: ["NSApplicationCrashOnExceptions": true])
 //        AppCenter.logLevel = .verbose

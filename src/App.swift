@@ -10,9 +10,11 @@ class App: AppCenterApplication {
         reason: "Prevent App Nap to preserve responsiveness")
     static let bundleIdentifier = Bundle.main.bundleIdentifier!
     static let bundleURL = Bundle.main.bundleURL
-    static let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as! String
-    static let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as! String
-    static let licence = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as! String
+    static let name = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "AltTab"
+    static let version = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String)
+        ?? (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+        ?? "0"
+    static let licence = Bundle.main.object(forInfoDictionaryKey: "NSHumanReadableCopyright") as? String ?? ""
     static let repository = "https://github.com/lwouis/alt-tab-macos"
     static let appIconReps = CGImage.allNamed("app.icns")
 
