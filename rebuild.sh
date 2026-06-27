@@ -31,7 +31,7 @@ archive_dsym() {
 
 echo "Building ${APP_NAME} (${CONFIGURATION}) -> ${DERIVED_DATA_PATH}"
 xcodebuild \
-    -workspace alt-tab-macos.xcworkspace \
+    -project alt-tab-macos.xcodeproj \
     -scheme "$SCHEME" \
     -configuration "$CONFIGURATION" \
     -derivedDataPath "$DERIVED_DATA_PATH" \
