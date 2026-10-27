@@ -50,3 +50,10 @@ Space headers in side panels are clickable to rename (e.g., "Space 1" → "Code"
 See `CLAUDE.md` for build commands, worktree layout, and known gotchas (TCC reset after every build, Debug UserDefaults poisoning, CGS timing windows).
 
 The app is renamed to `at004` with bundle ID `com.lwouis.alt-tab-macos.at004`. This isn't for running two instances simultaneously — it's so you can hot-swap between stock AltTab and this fork by quitting one and launching the other, without them fighting over the same bundle ID, preferences domain, or CLI port. The CLI port name derives from the bundle ID at runtime.
+
+## Development history
+
+[Historical fork notes](docs/history/legacy-fork-notes/README.md) preserve earlier
+merge decisions, window and tab debugging guides, and the former parent-directory
+instructions. These describe older layouts and behavior; use `AGENTS.md` for the
+current development workflow.
